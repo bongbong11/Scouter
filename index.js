@@ -33,6 +33,15 @@ const RANK_THRESHOLDS = [
 const defaultSettings = Object.freeze({
     roster: [], battleList: [], madameList: [],
     allowSameGender: true, selectedProfileName: null,
+    devUnlocked: false,
+    prompts: {
+        analyze:  { active: 0, slots: [{ name: '기본', system: '당신은 캐릭터 분석 전문가입니다. 입력된 캐릭터 시트를 읽고 정확한 JSON을 반환하세요. 마크다운 코드블록 없이 순수 JSON만 반환하세요.', user: `캐릭터 이름: {{name}}\n성별: {{gender}}\n\n캐릭터 시트:\n{{sheet}}\n\n반환 형식 (순수 JSON만):\n{"age":"나이(없으면 불명)","job":"직업/역할","location":"거주지/활동지역","appearance":"외형 특징 요약 1-2문장","personality":"성격 특징 요약 1-2문장","traits":"주요 특성/습관/특이사항 1-2문장","stats":{"combat":0~100 정수,"roast":0~100 정수,"sex":0~100 정수,"mental":0~100 정수,"charisma":0~100 정수}}\n\n수치는 캐릭터 설정에 충실하게, 차별화되게 책정하세요.` }] },
+        combat:   { active: 0, slots: [{ name: '기본', system: '당신은 캐릭터 육탄전 배틀 내레이터입니다. 포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다. 각 캐릭터의 신체 능력과 전투 수치를 반영해서 현실감 있게 진행하세요. 마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.', user: `{{condition}}\n\n참가자:\n{{fighters}}\n\n위 캐릭터들을 육탄전으로 싸움 붙여라.\n\n출력 형식 (포켓몬 배틀 게임 UI 스타일):\n- 각 행동은 짧고 임팩트 있게\n- "캐릭터명이(가) 기술을 사용했다!" 형식\n- "급소에 맞았다!" "효과가 굉장하다!" "야생의 X이(가) 나타났다!" 적극 사용\n- 캐릭터 성격이 배틀에 반영\n- 총 10~15행 내외\n- 마지막 줄: 【승자: 이름】` }] },
+        roast:    { active: 0, slots: [{ name: '기본', system: '당신은 캐릭터 말싸움 배틀 내레이터입니다. 포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다. 각 캐릭터의 성격과 언변 수치를 반영해서 현실감 있게 진행하세요. 마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.', user: `{{condition}}\n\n참가자:\n{{fighters}}\n\n위 캐릭터들을 말싸움으로 붙여라.\n\n출력 형식:\n- 캐릭터명: "대사" 형식으로\n- "급소에 맞았다!" "효과가 굉장하다!" 게임 텍스트 사용\n- 캐릭터 성격/언변 수치 반영\n- 총 10~15행 내외\n- 마지막 줄: 【승자: 이름】` }] },
+        compat:   { active: 0, slots: [{ name: '기본', system: '당신은 마담뚜라는 신묘한 점쟁이입니다. 사주와 관상으로 인연을 꿰뚫어보는 능력자. 말투는 한국 전통 점집 특유의 약간 신비롭고 능글맞은 사주 선생님 말투로. "~이로다", "~하느니라", "~하구나" 등의 어미 사용. 하지만 분석 내용은 구체적이고 날카로워야 합니다.', user: `다음 캐릭터들의 궁합을 분석하라.\n{{genderNote}} / {{structureNote}}\n\n캐릭터 정보:\n{{castDesc}}\n\n아래 항목을 순서대로 출력하라. 각 항목 앞에 아이콘과 제목을 붙여라:\n\n📊 【항목별 점수】\n각 항목을 "항목명: 수치/100" 형식으로, 한 줄씩:\n- 인연의 케미\n- 긴장의 기운\n- 충돌의 기운\n- 감정 폭발력\n- 정염의 기운{{multiLine}}\n\n💘 【총 궁합 점수 & 한마디】\n총점: XX점 / 100점\n커플 유형: (유형명 — 예: 집착형 다크로맨스, 원수에서 연인, 폭발형 케미, 조용한 폭풍, 마이웨이 커플 등 창의적으로)\n(점쟁이 말투로 한마디, 2-3문장. 점수에 따라 다른 코멘트)\n\n⚡ 【관계의 기운】\n(누가 쫓는 자고 누가 도망치는 자인지, 감정선 주도권, 권력 관계, 감정 표현 방식의 차이 등. 점쟁이 말투로 4-6문장. 두 사람의 나이/직업/성격 차이를 반영할 것)\n\n🎭 【예상 장르 TOP 3】\n1순위: 장르명 — 이유 한 문장 (왜 이 커플에게 맞는지 구체적으로)\n2순위: 장르명 — 이유 한 문장\n3순위: 장르명 — 이유 한 문장\n\n💑 【궁합 심층 분석】\n잘 어울리는 점: (두 캐릭터의 특성 기반으로 구체적으로 2-3문장)\n충돌 포인트: (갈등 요소 구체적으로 2-3문장)\n장기 전망: (이 관계가 어디로 흘러갈지 2-3문장)\n\n{{triBlock}}\n🔥 【터질 것 같은 명장면 TOP 3】\n1위: 제목 — 묘사 2문장 (이 두 캐릭터에게 특화된 씬)\n2위: 제목 — 묘사 2문장\n3위: 제목 — 묘사 2문장` }] },
+        scenario: { active: 0, slots: [{ name: '기본', system: '당신은 로맨스 소설 작가이자 롤플레이 시나리오 기획자입니다. 캐릭터 분석을 바탕으로 실제 롤플레이로 굴릴 수 있는 구체적인 시나리오를 씁니다.', user: `다음 캐릭터들의 롤플레이 시나리오 3가지를 추천하라.\n\n캐릭터:\n{{castDesc}}\n\n궁합 분석 참고:\n{{compatResult}}\n\n각 시나리오 형식:\n\n◆ 시나리오 1\n장르: (장르명)\n제목: "(제목)"\n첫 만남/시작: (어디서, 어떤 상황으로 시작. 3-4문장 구체적으로)\n전개: (핵심 갈등/발전. 3-4문장)\n추천 첫 장면: (롤플 시작 시 구체적인 첫 장면. 2-3문장)\n\n◆ 시나리오 2\n(같은 형식)\n\n◆ 시나리오 3\n(같은 형식)\n\n장르 다양하게. 캐릭터 직업/나이/성격/지역 최대한 반영.` }] },
+        sim:      { active: 0, slots: [{ name: '기본', system: '당신은 롤플레이 시뮬레이터입니다. 주어진 상황에서 캐릭터들이 어떻게 반응하고 상황이 어떻게 전개될지 현실감 있게 시뮬레이션합니다. 캐릭터 성격을 충실히 반영하고, 대화와 행동을 섞어 소설체로 씁니다.', user: `다음 캐릭터들이 주어진 상황에서 어떻게 행동하는지 시뮬레이션하라.\n\n캐릭터:\n{{castDesc}}\n\n상황: {{situation}}\n\n소설체로, 대화와 행동/심리 묘사 섞어서. 각 캐릭터 성격 확실히 드러나게. 300~500자 내외. 마지막에 【이 상황의 결과】 한 줄로 요약.` }] },
+    },
 });
 
 // ═══════════════════════════════════════════
@@ -82,6 +91,21 @@ function esc(s) {
 }
 
 // ═══════════════════════════════════════════
+// 프롬프트 슬롯 getter
+// ═══════════════════════════════════════════
+function getPromptSlot(key) {
+    const settings = getSettings();
+    if (!settings.prompts) settings.prompts = {};
+    const def = defaultSettings.prompts[key];
+    const p = settings.prompts[key] || def;
+    const idx = p.active ?? 0;
+    return p.slots?.[idx] || def.slots[0];
+}
+function fillTpl(tpl, vars) {
+    return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '');
+}
+
+// ═══════════════════════════════════════════
 // AI 호출 — 선택된 연결 프로필 사용
 // ═══════════════════════════════════════════
 async function callAI(prompt, systemPrompt) {
@@ -111,161 +135,67 @@ async function callAI(prompt, systemPrompt) {
 // 프롬프트들
 // ═══════════════════════════════════════════
 async function analyzeCharSheet(name, gender, rawSheet) {
-    const system = '당신은 캐릭터 분석 전문가입니다. 입력된 캐릭터 시트를 읽고 정확한 JSON을 반환하세요. 마크다운 코드블록 없이 순수 JSON만 반환하세요.';
-    const prompt = `캐릭터 이름: ${name}
-성별: ${gender === 'female' ? '여성' : '남성'}
-
-캐릭터 시트:
-${rawSheet}
-
-반환 형식 (순수 JSON만):
-{"age":"나이(없으면 불명)","job":"직업/역할","location":"거주지/활동지역","appearance":"외형 특징 요약 1-2문장","personality":"성격 특징 요약 1-2문장","traits":"주요 특성/습관/특이사항 1-2문장","stats":{"combat":0~100 정수,"roast":0~100 정수,"sex":0~100 정수,"mental":0~100 정수,"charisma":0~100 정수}}
-
-수치는 캐릭터 설정에 충실하게, 차별화되게 책정하세요. 모든 수치가 비슷하면 안 됩니다.`;
+    const slot = getPromptSlot('analyze');
+    const userPrompt = fillTpl(slot.user, {
+        name, gender: gender === 'female' ? '여성' : '남성', sheet: rawSheet
+    });
     try {
-        const raw = await callAI(prompt, system);
+        const raw = await callAI(userPrompt, slot.system);
         return JSON.parse(raw.replace(/```json|```/g, '').trim());
     } catch {
-        return {
-            age: '불명', job: '불명', location: '불명',
-            appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패',
-            stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 }
-        };
+        return { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 } };
     }
 }
 
 async function runBattlePrompt(fighters, category, condition) {
-    const catMeta = BATTLE_CATS.find(c => c.id === category) || BATTLE_CATS[0];
-    const isRoast = category === 'roast';
-    const desc = fighters.map(f =>
-        `【${f.name}】(${f.gender === 'female' ? '여' : '남'}, ${f.parsed.age}, ${f.parsed.job}, ${f.parsed.location})
-성격: ${f.parsed.personality}
-특징: ${f.parsed.traits}
-${catMeta.label} 수치: ${f.stats[category]}pt`
+    const key = category === 'roast' ? 'roast' : 'combat';
+    const slot = getPromptSlot(key);
+    const fightersText = fighters.map(f =>
+        `【${f.name}】(${f.gender === 'female' ? '여' : '남'}, ${f.parsed.age}, ${f.parsed.job}, ${f.parsed.location})\n성격: ${f.parsed.personality}\n특징: ${f.parsed.traits}\n${key === 'roast' ? '말싸움' : '전투력'} 수치: ${f.stats[category]}pt`
     ).join('\n\n');
-    const cond = condition?.trim() ? `상황/조건: ${condition}` : '특별한 조건 없음. 그냥 붙어라.';
-    const system = isRoast
-        ? '당신은 캐릭터 말싸움 배틀 내레이터입니다. 포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다. 각 캐릭터의 성격과 언변 수치를 반영해서 현실감 있게 진행하세요. 마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.'
-        : '당신은 캐릭터 육탄전 배틀 내레이터입니다. 포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다. 각 캐릭터의 신체 능력과 전투 수치를 반영해서 현실감 있게 진행하세요. 마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.';
-    const prompt = `${cond}
-
-참가자:
-${desc}
-
-위 캐릭터들을 ${catMeta.label} 카테고리로 싸움 붙여라.
-
-출력 형식 (포켓몬 배틀 게임 UI 스타일):
-- 각 행동/발언은 짧고 임팩트 있게
-- "${isRoast ? `캐릭터명: "대사"` : '캐릭터명이(가) 기술을 사용했다!'}" 형식 활용
-- "급소에 맞았다!" "효과가 굉장하다!" "야생의 X이(가) 나타났다!" 같은 포켓몬 게임 텍스트 적극 사용
-- 캐릭터 성격이 배틀에 반영되어야 함
-- 총 10~15행 내외
-- 마지막 줄: 【승자: 이름】`;
-    return await callAI(prompt, system);
+    const condText = condition?.trim() ? `상황/조건: ${condition}` : '특별한 조건 없음. 그냥 붙어라.';
+    const userPrompt = fillTpl(slot.user, { fighters: fightersText, condition: condText });
+    return await callAI(userPrompt, slot.system);
 }
 
 async function runCompatPrompt(cast, allowSame) {
+    const slot = getPromptSlot('compat');
     const castDesc = cast.map(c =>
-        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})
-성격: ${c.parsed.personality}
-특징: ${c.parsed.traits}
-외형: ${c.parsed.appearance}`
+        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}\n외형: ${c.parsed.appearance}`
     ).join('\n\n');
     const isMulti = cast.length >= 3;
-    const gNote = allowSame ? '동성 커플도 허용' : '이성 커플만 분석';
-    const multiNote = isMulti ? '3명 이상이므로 삼각/다각 구도도 분석할 것' : '1:1 궁합 분석';
-    const system = '당신은 마담뚜라는 신묘한 점쟁이입니다. 사주와 관상으로 인연을 꿰뚫어보는 능력자. 말투는 한국 전통 점집 특유의 약간 신비롭고 능글맞은 사주 선생님 말투로. "~이로다", "~하느니라", "~하구나" 등의 어미 사용. 하지만 분석 내용은 구체적이고 날카로워야 합니다.';
-    const multiLine = isMulti ? '\n- 구도의 복잡함' : '';
-    const triBlock = isMulti ? `\n🔺 【다각 구도 분석】\n(삼각/폴리 여부, 키맨은 누구인지, 구도 분석. 점쟁이 말투 4-6문장)\n` : '';
-    const prompt = `다음 캐릭터들의 궁합을 분석하라.
-${gNote} / ${multiNote}
-
-캐릭터 정보:
-${castDesc}
-
-아래 항목을 순서대로 출력하라. 각 항목 앞에 아이콘과 제목을 붙여라:
-
-📊 【항목별 점수】
-각 항목을 "항목명: 수치/100" 형식으로, 한 줄씩:
-- 인연의 케미
-- 긴장의 기운
-- 충돌의 기운
-- 감정 폭발력
-- 정염의 기운${multiLine}
-
-💘 【총 궁합 점수 & 한마디】
-총점: XX점 / 100점
-커플 유형: (유형명)
-(점쟁이 말투로 한마디, 2-3문장)
-
-⚡ 【관계의 기운】
-(누가 쫓는 자고 누가 도망치는 자인지, 감정선 주도권, 권력 관계 등. 점쟁이 말투로 4-6문장)
-
-🎭 【예상 장르 TOP 3】
-1순위: 장르명 — 이유 한 문장
-2순위: 장르명 — 이유 한 문장
-3순위: 장르명 — 이유 한 문장
-
-💑 【궁합 심층 분석】
-잘 어울리는 점: (구체적으로 2-3문장)
-충돌 포인트: (구체적으로 2-3문장)
-장기 전망: (구체적으로 2-3문장)
-${triBlock}
-🔥 【터질 것 같은 명장면 TOP 3】
-1위: 제목 — 묘사 2문장
-2위: 제목 — 묘사 2문장
-3위: 제목 — 묘사 2문장`;
-    return await callAI(prompt, system);
+    const userPrompt = fillTpl(slot.user, {
+        castDesc,
+        genderNote: allowSame ? '동성 커플도 허용' : '이성 커플만 분석',
+        structureNote: isMulti ? '3명 이상이므로 삼각/다각 구도도 분석할 것' : '1:1 궁합 분석',
+        multiLine: isMulti ? '\n- 구도의 복잡함' : '',
+        triBlock: isMulti ? `🔺 【다각 구도 분석】\n(삼각/폴리 여부, 키맨은 누구인지, 구도 분석. 점쟁이 말투 4-6문장)\n` : '',
+    });
+    return await callAI(userPrompt, slot.system);
 }
 
 async function runScenarioPrompt(cast, compatResult) {
+    const slot = getPromptSlot('scenario');
     const castDesc = cast.map(c =>
         `${c.name}(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location}): ${c.parsed.personality} / ${c.parsed.traits}`
     ).join('\n');
-    const system = '당신은 로맨스 소설 작가이자 롤플레이 시나리오 기획자입니다. 캐릭터 분석을 바탕으로 실제 롤플레이로 굴릴 수 있는 구체적인 시나리오를 씁니다.';
-    const prompt = `다음 캐릭터들의 롤플레이 시나리오 3가지를 추천하라.
-
-캐릭터:
-${castDesc}
-
-궁합 분석 참고:
-${(compatResult || '').slice(0, 600)}
-
-각 시나리오 형식:
-
-◆ 시나리오 1
-장르: (장르명)
-제목: "(제목)"
-첫 만남/시작: (어디서, 어떤 상황으로 시작. 3-4문장 구체적으로)
-전개: (핵심 갈등/발전. 3-4문장)
-추천 첫 장면: (롤플 시작 시 구체적인 첫 장면. 2-3문장)
-
-◆ 시나리오 2
-(같은 형식)
-
-◆ 시나리오 3
-(같은 형식)
-
-장르 다양하게 (다크로맨스, 로맨코미, 슬로우번, 에너미즈투러버스, 계약연애, 재회물, 직장로맨스 등). 캐릭터 직업/나이/성격/지역 최대한 반영.`;
-    return await callAI(prompt, system);
+    const userPrompt = fillTpl(slot.user, {
+        castDesc,
+        compatResult: (compatResult || '').slice(0, 600),
+    });
+    return await callAI(userPrompt, slot.system);
 }
 
 async function runSimPrompt(cast, situation) {
+    const slot = getPromptSlot('sim');
     const castDesc = cast.map(c =>
-        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job})
-성격: ${c.parsed.personality}
-특징: ${c.parsed.traits}`
+        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}`
     ).join('\n\n');
-    const system = '당신은 롤플레이 시뮬레이터입니다. 주어진 상황에서 캐릭터들이 어떻게 반응하고 상황이 어떻게 전개될지 현실감 있게 시뮬레이션합니다. 캐릭터 성격을 충실히 반영하고, 대화와 행동을 섞어 소설체로 씁니다.';
-    const prompt = `다음 캐릭터들이 주어진 상황에서 어떻게 행동하는지 시뮬레이션하라.
-
-캐릭터:
-${castDesc}
-
-상황: ${situation || '두 사람이 우연히 마주쳤다.'}
-
-소설체로, 대화와 행동/심리 묘사 섞어서. 각 캐릭터 성격 확실히 드러나게. 300~500자 내외. 마지막에 【이 상황의 결과】 한 줄로 요약.`;
-    return await callAI(prompt, system);
+    const userPrompt = fillTpl(slot.user, {
+        castDesc,
+        situation: situation || '두 사람이 우연히 마주쳤다.',
+    });
+    return await callAI(userPrompt, slot.system);
 }
 
 // ═══════════════════════════════════════════
@@ -1031,11 +961,21 @@ function renderMadameSim(container) {
 // ═══════════════════════════════════════════
 // 설정 탭
 // ═══════════════════════════════════════════
+const PROMPT_META = {
+    analyze:  { icon: '🔬', label: '캐릭터 분석',   desc: '캐릭터 시트를 읽고 능력치·프로필을 JSON으로 파싱하는 프롬프트. {{name}} {{gender}} {{sheet}} 변수 사용.' },
+    combat:   { icon: '⚔️', label: '육탄전 배틀',   desc: '포켓몬 배틀 스타일 육탄전 시뮬. {{fighters}} {{condition}} 변수 사용.' },
+    roast:    { icon: '🗣️', label: '말싸움 배틀',   desc: '포켓몬 배틀 스타일 말싸움 시뮬. {{fighters}} {{condition}} 변수 사용.' },
+    compat:   { icon: '💘', label: '궁합 분석',      desc: '마담뚜 점집 말투 궁합 분석. {{castDesc}} {{genderNote}} {{structureNote}} {{multiLine}} {{triBlock}} 변수 사용.' },
+    scenario: { icon: '📖', label: '롤플 시나리오',  desc: '궁합 분석 결과 기반 롤플 시나리오 3개 추천. {{castDesc}} {{compatResult}} 변수 사용.' },
+    sim:      { icon: '🎲', label: '상황 시뮬',      desc: '특정 상황에서 캐릭터 반응 시뮬. {{castDesc}} {{situation}} 변수 사용.' },
+};
+
 function renderSettings(container) {
     const settings = getSettings();
     const { extensionSettings } = SillyTavern.getContext();
     const profiles = extensionSettings?.['connectionManager']?.profiles || [];
     const currentProfile = settings.selectedProfileName || '현재 연결 그대로';
+    const devUnlocked = settings.devUnlocked || false;
 
     container.innerHTML = `
         ${renderDivider('연결 프로필', '#ffaa00')}
@@ -1047,7 +987,7 @@ function renderSettings(container) {
             </div>
         </div>
         ${renderDivider('저장 현황', '#ffaa00')}
-        <div style="background:linear-gradient(135deg,#1a0010,#0f000a);border:1px solid #330022;border-radius:2px;padding:14px;margin-bottom:20px">
+        <div style="background:linear-gradient(135deg,#1a0010,#0f000a);border:1px solid #330022;border-radius:2px;padding:14px;margin-bottom:14px">
             <div class="cl-stat-count-grid">
                 <div><div class="cl-stat-count-num" style="color:#ff44aa;text-shadow:0 0 8px #ff44aa88">${settings.roster.length}</div><div class="cl-stat-count-label">캐릭터</div></div>
                 <div><div class="cl-stat-count-num" style="color:#ff2200;text-shadow:0 0 8px #ff220088">${settings.battleList.length}</div><div class="cl-stat-count-label">배틀</div></div>
@@ -1058,10 +998,69 @@ function renderSettings(container) {
                 <button id="cl-import-btn" style="flex:1;background:none;border:1px solid #330022;border-radius:2px;padding:8px;cursor:pointer;color:#664433;font-size:11px;font-family:monospace">📥 가져오기</button>
             </div>
         </div>
+
+        ${renderDivider('개발자 모드', '#ff8800')}
+        <div style="margin-bottom:14px">
+            ${!devUnlocked ? `
+            <div style="display:flex;gap:8px;align-items:center">
+                <button id="cl-dev-btn" title="개발자 모드" style="background:#1a0a00;border:2px solid #ff880066;border-radius:2px;padding:8px 12px;cursor:pointer;font-size:16px">🔒</button>
+                <input id="cl-dev-pw" type="password" placeholder="비밀번호" style="flex:1;background:#0f000a;border:1px solid #440022;border-radius:2px;padding:7px 10px;color:#cc9977;font-size:12px;font-family:monospace;outline:none">
+                <button id="cl-dev-unlock" style="background:linear-gradient(180deg,#ff8800cc,#ff880088);border:2px solid #ff8800;border-radius:2px;padding:7px 12px;cursor:pointer;color:#fff;font-size:11px;font-weight:900;font-family:monospace">잠금해제</button>
+            </div>` : `
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                <span style="font-size:16px">🔓</span>
+                <span style="font-size:11px;color:#ff8800;font-family:monospace;font-weight:900">개발자 모드 활성화됨</span>
+                <button id="cl-dev-lock" style="margin-left:auto;background:none;border:1px solid #440022;border-radius:2px;padding:4px 10px;cursor:pointer;color:#664433;font-size:10px;font-family:monospace">잠금</button>
+            </div>
+            <div id="cl-prompt-editor">
+                ${Object.entries(PROMPT_META).map(([key, meta]) => {
+                    const p = settings.prompts?.[key] || defaultSettings.prompts[key];
+                    const activeIdx = p.active ?? 0;
+                    return `<div style="background:#0f0008;border:1px solid #330022;border-radius:2px;margin-bottom:10px;overflow:hidden">
+                        <div class="cl-prompt-header" data-key="${key}" style="padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;background:#1a0010">
+                            <span>${meta.icon}</span>
+                            <div style="flex:1">
+                                <div style="font-size:12px;font-weight:700;color:#ffcc88;font-family:monospace">${meta.label}</div>
+                                <div style="font-size:10px;color:#664433;margin-top:2px">${meta.desc}</div>
+                            </div>
+                            <span style="font-size:10px;color:#ff8800;font-family:monospace">슬롯 ${activeIdx+1} 사용 중</span>
+                            <span style="color:#664433;font-size:12px">▾</span>
+                        </div>
+                        <div class="cl-prompt-body" data-key="${key}" style="display:none;padding:12px">
+                            <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+                                <span style="font-size:10px;color:#664433;font-family:monospace">슬롯:</span>
+                                ${p.slots.map((s, i) => `
+                                <button class="cl-slot-btn" data-key="${key}" data-idx="${i}" style="padding:4px 10px;background:${i===activeIdx?'#ff880033':'#0f0005'};border:1px solid ${i===activeIdx?'#ff8800':'#330022'};border-radius:2px;cursor:pointer;color:${i===activeIdx?'#ff8800':'#664433'};font-size:10px;font-family:monospace">${s.name||`슬롯${i+1}`}</button>`).join('')}
+                                <button class="cl-slot-add" data-key="${key}" style="padding:4px 8px;background:none;border:1px dashed #330022;border-radius:2px;cursor:pointer;color:#443322;font-size:10px;font-family:monospace">+ 추가</button>
+                            </div>
+                            <div style="margin-bottom:8px">
+                                <div style="font-size:9px;color:#664433;margin-bottom:4px;font-family:monospace;letter-spacing:1px">슬롯 이름</div>
+                                <input class="cl-slot-name" data-key="${key}" value="${esc(p.slots[activeIdx]?.name||`슬롯${activeIdx+1}`)}" style="width:100%;background:#0a0005;border:1px solid #330022;border-radius:2px;padding:6px 8px;color:#cc9977;font-size:11px;font-family:monospace;outline:none;box-sizing:border-box">
+                            </div>
+                            <div style="margin-bottom:8px">
+                                <div style="font-size:9px;color:#664433;margin-bottom:4px;font-family:monospace;letter-spacing:1px">SYSTEM 프롬프트</div>
+                                <textarea class="cl-slot-system" data-key="${key}" rows="3" style="width:100%;background:#0a0005;border:1px solid #330022;border-radius:2px;padding:6px 8px;color:#cc9977;font-size:11px;font-family:monospace;outline:none;box-sizing:border-box;resize:vertical;line-height:1.6">${esc(p.slots[activeIdx]?.system||'')}</textarea>
+                            </div>
+                            <div style="margin-bottom:8px">
+                                <div style="font-size:9px;color:#664433;margin-bottom:4px;font-family:monospace;letter-spacing:1px">USER 프롬프트 ({{변수}} 사용 가능)</div>
+                                <textarea class="cl-slot-user" data-key="${key}" rows="6" style="width:100%;background:#0a0005;border:1px solid #330022;border-radius:2px;padding:6px 8px;color:#cc9977;font-size:11px;font-family:monospace;outline:none;box-sizing:border-box;resize:vertical;line-height:1.6">${esc(p.slots[activeIdx]?.user||'')}</textarea>
+                            </div>
+                            <div style="display:flex;gap:6px">
+                                <button class="cl-slot-save" data-key="${key}" style="flex:1;background:linear-gradient(180deg,#ff8800cc,#ff880088);border:2px solid #ff8800;border-radius:2px;padding:7px;cursor:pointer;color:#fff;font-size:11px;font-weight:900;font-family:monospace;box-shadow:0 0 8px #ff880066">💾 저장</button>
+                                <button class="cl-slot-reset" data-key="${key}" style="padding:7px 10px;background:none;border:1px solid #440022;border-radius:2px;cursor:pointer;color:#664433;font-size:10px;font-family:monospace">기본값</button>
+                                ${p.slots.length > 1 ? `<button class="cl-slot-del" data-key="${key}" style="padding:7px 10px;background:none;border:1px solid #440022;border-radius:2px;cursor:pointer;color:#664433;font-size:10px;font-family:monospace">🗑</button>` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`}
+        </div>
+
         <div style="text-align:center;font-size:9px;color:#330022;font-family:monospace;letter-spacing:1px;padding-top:8px;border-top:1px solid #0d0d1a">
             Scouter v1.0<br><span style="color:#220011">챗씨부인운명상담소</span>
         </div>`;
 
+    // 내보내기/가져오기
     container.querySelector('#cl-export-btn')?.addEventListener('click', () => {
         const s = getSettings(), data = JSON.stringify(s, null, 2),
               blob = new Blob([data], { type: 'application/json' }),
@@ -1077,20 +1076,141 @@ function renderSettings(container) {
                 const imported = JSON.parse(await file.text());
                 if (imported.roster) {
                     const s = getSettings();
-                    s.roster = imported.roster;
-                    s.battleList = imported.battleList || [];
-                    s.madameList = imported.madameList || [];
+                    s.roster = imported.roster; s.battleList = imported.battleList || []; s.madameList = imported.madameList || [];
                     save(); toastr.success('가져오기 완료'); renderSettings(container);
                 } else toastr.error('올바른 백업 파일이 아닙니다');
             } catch { toastr.error('가져오기 실패'); }
         };
         input.click();
     });
+
+    // 개발자 모드 잠금해제
+    if (!devUnlocked) {
+        const pwInput = container.querySelector('#cl-dev-pw');
+        const unlock = () => {
+            if (pwInput?.value === '8024') {
+                const s = getSettings(); s.devUnlocked = true; save();
+                renderSettings(container); toastr.success('개발자 모드 활성화');
+            } else { toastr.error('비밀번호가 틀렸습니다'); }
+        };
+        container.querySelector('#cl-dev-unlock')?.addEventListener('click', unlock);
+        pwInput?.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+        container.querySelector('#cl-dev-btn')?.addEventListener('click', () => pwInput?.focus());
+    } else {
+        // 잠금
+        container.querySelector('#cl-dev-lock')?.addEventListener('click', () => {
+            const s = getSettings(); s.devUnlocked = false; save();
+            renderSettings(container);
+        });
+
+        // 프롬프트 헤더 토글
+        container.querySelectorAll('.cl-prompt-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const key = header.dataset.key;
+                const body = container.querySelector(`.cl-prompt-body[data-key="${key}"]`);
+                if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+
+        // 슬롯 선택
+        container.querySelectorAll('.cl-slot-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const s = getSettings();
+                if (!s.prompts) s.prompts = {};
+                if (!s.prompts[btn.dataset.key]) s.prompts[btn.dataset.key] = structuredClone(defaultSettings.prompts[btn.dataset.key]);
+                s.prompts[btn.dataset.key].active = parseInt(btn.dataset.idx);
+                save(); renderSettings(container);
+            });
+        });
+
+        // 슬롯 추가
+        container.querySelectorAll('.cl-slot-add').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const s = getSettings();
+                if (!s.prompts) s.prompts = {};
+                if (!s.prompts[btn.dataset.key]) s.prompts[btn.dataset.key] = structuredClone(defaultSettings.prompts[btn.dataset.key]);
+                const def = defaultSettings.prompts[btn.dataset.key].slots[0];
+                s.prompts[btn.dataset.key].slots.push({ name: `슬롯${s.prompts[btn.dataset.key].slots.length+1}`, system: def.system, user: def.user });
+                s.prompts[btn.dataset.key].active = s.prompts[btn.dataset.key].slots.length - 1;
+                save(); renderSettings(container);
+            });
+        });
+
+        // 슬롯 저장
+        container.querySelectorAll('.cl-slot-save').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.key;
+                const s = getSettings();
+                if (!s.prompts) s.prompts = {};
+                if (!s.prompts[key]) s.prompts[key] = structuredClone(defaultSettings.prompts[key]);
+                const idx = s.prompts[key].active ?? 0;
+                s.prompts[key].slots[idx] = {
+                    name: container.querySelector(`.cl-slot-name[data-key="${key}"]`)?.value || `슬롯${idx+1}`,
+                    system: container.querySelector(`.cl-slot-system[data-key="${key}"]`)?.value || '',
+                    user: container.querySelector(`.cl-slot-user[data-key="${key}"]`)?.value || '',
+                };
+                save(); toastr.success(`${PROMPT_META[key]?.label} 슬롯 저장됨`);
+            });
+        });
+
+        // 기본값 복원
+        container.querySelectorAll('.cl-slot-reset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.key;
+                const s = getSettings();
+                if (!s.prompts) s.prompts = {};
+                if (!s.prompts[key]) s.prompts[key] = structuredClone(defaultSettings.prompts[key]);
+                const idx = s.prompts[key].active ?? 0;
+                const def = defaultSettings.prompts[key].slots[0];
+                s.prompts[key].slots[idx] = { ...def, name: s.prompts[key].slots[idx].name };
+                save(); renderSettings(container); toastr.success('기본값으로 복원됨');
+            });
+        });
+
+        // 슬롯 삭제
+        container.querySelectorAll('.cl-slot-del').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.key;
+                const s = getSettings();
+                if (!s.prompts?.[key] || s.prompts[key].slots.length <= 1) return;
+                const idx = s.prompts[key].active ?? 0;
+                s.prompts[key].slots.splice(idx, 1);
+                s.prompts[key].active = Math.max(0, idx - 1);
+                save(); renderSettings(container);
+            });
+        });
+    }
 }
 
 // ═══════════════════════════════════════════
-// 플로팅 창 HTML
+// 플로팅 창 열기/닫기 (전역)
 // ═══════════════════════════════════════════
+function openFloat() {
+    if (document.getElementById('scouter-float')) return;
+    document.body.insertAdjacentHTML('beforeend', createFloatingPanel());
+    const panel = document.getElementById('scouter-float');
+    const handle = document.getElementById('scouter-drag-handle');
+    makeDraggable(panel, handle);
+    panel.querySelectorAll('.cl-tab').forEach(btn =>
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+    );
+    panel.querySelectorAll('.cl-madame-subtab').forEach(btn =>
+        btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab))
+    );
+    document.getElementById('scouter-close')?.addEventListener('click', closeFloat);
+    state.isPanelOpen = true;
+    switchTab('roster');
+}
+
+function closeFloat() {
+    document.getElementById('scouter-float')?.remove();
+    state.isPanelOpen = false;
+}
+
+function toggleFloat() {
+    if (document.getElementById('scouter-float')) closeFloat();
+    else openFloat();
+}
 function createFloatingPanel() {
     return `<div id="scouter-float" style="
         position:fixed; top:60px; right:20px;
@@ -1220,39 +1340,7 @@ export async function onActivate() {
     const toolbar = document.getElementById('extensionsMenu') ?? document.getElementById('top-bar');
     toolbar?.insertAdjacentHTML('beforeend', scouterBtnHtml);
 
-    // ── 3. 플로팅 창 토글 ──
-    function openFloat() {
-        if (document.getElementById('scouter-float')) return;
-        document.body.insertAdjacentHTML('beforeend', createFloatingPanel());
-
-        const panel = document.getElementById('scouter-float');
-        const handle = document.getElementById('scouter-drag-handle');
-        makeDraggable(panel, handle);
-
-        // 탭 이벤트
-        panel.querySelectorAll('.cl-tab').forEach(btn =>
-            btn.addEventListener('click', () => switchTab(btn.dataset.tab))
-        );
-        panel.querySelectorAll('.cl-madame-subtab').forEach(btn =>
-            btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab))
-        );
-        document.getElementById('scouter-close')?.addEventListener('click', closeFloat);
-
-        state.isPanelOpen = true;
-        switchTab('roster');
-        panel.querySelector('.cl-tab[data-tab="roster"]')?.classList.add('active-roster');
-    }
-
-    function closeFloat() {
-        document.getElementById('scouter-float')?.remove();
-        state.isPanelOpen = false;
-    }
-
-    function toggleFloat() {
-        if (document.getElementById('scouter-float')) closeFloat();
-        else openFloat();
-    }
-
+    // ── 3. 버튼 이벤트 바인딩 ──
     document.getElementById('scouter-wand-btn')?.addEventListener('click', toggleFloat);
 
     // ESC로 닫기
