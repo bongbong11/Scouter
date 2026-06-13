@@ -94,7 +94,7 @@ async function callAI(prompt, systemPrompt) {
     // connection-manager 프로필 목록에서 해당 프로필 객체 찾기
     let connectionProfile = null;
     if (selectedProfileName) {
-        const profiles = extensionSettings?.['connection_manager']?.profiles || [];
+        const profiles = extensionSettings?.['connectionManager']?.profiles || [];
         connectionProfile = profiles.find(p => p.name === selectedProfileName) || null;
     }
 
@@ -455,18 +455,42 @@ function importSTChars() {
 }
 
 function importPersonas() {
-    const ctx = SillyTavern.getContext();
-    const personas = ctx.personas || {};
-    const keys = Object.keys(personas);
-    if (!keys.length) { toastr.warning('불러올 페르소나가 없습니다'); return; }
-    const list = keys.map(k => `<div class="cl-imp-p" data-key="${esc(k)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #220011;color:#cc9977;font-family:monospace;font-size:12px">${esc(k)}</div>`).join('');
+    const dropdown = document.getElementById('persona-management-dropdown');
+    if (!dropdown) { toastr.warning('페르소나 드롭다운을 찾을 수 없습니다'); return; }
+
+    const options = Array.from(dropdown.options).filter(o => o.value && o.value !== '');
+    if (!options.length) { toastr.warning('등록된 페르소나가 없습니다'); return; }
+
+    const list = options.map(o =>
+        `<div class="cl-imp-p" data-name="${esc(o.textContent.trim())}" data-value="${esc(o.value)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #220011;color:#cc9977;font-family:monospace;font-size:12px">${esc(o.textContent.trim())}</div>`
+    ).join('');
+
     const { Popup, POPUP_TYPE } = SillyTavern.getContext();
-    const popup = new Popup(`<div style="max-height:300px;overflow-y:auto;background:#0f0010;border:1px solid #440033;border-radius:2px">${list}</div>`, POPUP_TYPE.TEXT, '', { okButton: '닫기' });
+    const popup = new Popup(
+        `<div style="max-height:300px;overflow-y:auto;background:#0f0010;border:1px solid #440033;border-radius:2px">${list}</div>`,
+        POPUP_TYPE.TEXT, '', { okButton: '닫기' }
+    );
     setTimeout(() => {
-        document.querySelectorAll('.cl-imp-p').forEach(item => item.addEventListener('click', () => {
-            const k = item.dataset.key;
-            const p = personas[k];
-            addCharFromImport(k, p?.description || k, 'female');
+        document.querySelectorAll('.cl-imp-p').forEach(item => item.addEventListener('click', async () => {
+            const name = item.dataset.name;
+            const value = item.dataset.value;
+
+            // dropdown 선택 변경 후 change 이벤트 발생 → ST가 persona_description 업데이트
+            const prevValue = dropdown.value;
+            dropdown.value = value;
+            dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // ST가 description 업데이트할 시간 대기
+            await new Promise(r => setTimeout(r, 300));
+
+            const desc = document.getElementById('persona_description')?.value || '';
+            const raw = `페르소나 이름: ${name}\n${desc || '(설명 없음)'}`;
+
+            // 원래 선택으로 복구
+            dropdown.value = prevValue;
+            dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+
+            addCharFromImport(name, raw, 'female');
             popup.hide?.();
         }));
     }, 100);
@@ -1019,7 +1043,7 @@ function renderSettings(container) {
     const { extensionSettings } = SillyTavern.getContext();
 
     // connection-manager에서 저장된 프로필 목록 읽기
-    const profiles = extensionSettings?.['connection_manager']?.profiles || [];
+    const profiles = extensionSettings?.['connectionManager']?.profiles || [];
     const selectedProfileName = settings.selectedProfileName || '';
 
     const profileOptions = profiles.length
@@ -1098,29 +1122,73 @@ function renderSettings(container) {
 // ═══════════════════════════════════════════
 export async function onActivate() {
     console.log(`[${MODULE_NAME}] 활성화`);
-    document.body.insertAdjacentHTML('beforeend', createPanelHTML());
 
-    const btnHtml = `<button id="character-lab-btn" title="Character Lab — 챗씨부인운명상담소">🔴 LAB</button>`;
-    const toolbar = document.getElementById('leftSendForm')
-        || document.getElementById('send_form')
-        || document.querySelector('.flex-container.flexGap5')
-        || document.querySelector('#top-bar');
-    if (toolbar) toolbar.insertAdjacentHTML('afterbegin', btnHtml);
-    else document.body.insertAdjacentHTML('beforeend', btnHtml);
+    // ST Extensions 패널에 inline-drawer 형식으로 inject
+    const drawerHtml = `
+    <div class="inline-drawer" id="scouter-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header" id="scouter-drawer-toggle">
+            <b>🔴 Scouter</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content" id="scouter-drawer-content" style="padding:0">
+            <!-- 패널은 열릴 때 렌더링 -->
+            <div id="scouter-panel-root" style="min-height:200px"></div>
+        </div>
+    </div>`;
 
-    document.getElementById('character-lab-btn')?.addEventListener('click', () => {
-        const panel = document.getElementById('character-lab-panel');
-        if (panel) { panel.classList.add('open'); state.isPanelOpen = true; renderActivePane(); }
+    // extensions_settings2 가 있으면 거기, 없으면 extensions_settings
+    const target = document.getElementById('extensions_settings2')
+        || document.getElementById('extensions_settings');
+    if (target) {
+        target.insertAdjacentHTML('beforeend', drawerHtml);
+    } else {
+        // fallback: body에 슬라이드 패널 방식
+        document.body.insertAdjacentHTML('beforeend', createPanelHTML());
+        document.getElementById('cl-close')?.addEventListener('click', () => {
+            document.getElementById('character-lab-panel')?.classList.remove('open');
+            state.isPanelOpen = false;
+        });
+    }
+
+    // drawer 토글 — 열릴 때 패널 렌더링
+    const drawerToggle = document.getElementById('scouter-drawer-toggle');
+    const drawerContent = document.getElementById('scouter-drawer-content');
+    const panelRoot = document.getElementById('scouter-panel-root');
+
+    if (drawerToggle && panelRoot) {
+        // ST inline-drawer 클릭 시 패널 주입
+        drawerToggle.addEventListener('click', () => {
+            // drawer가 열리는 타이밍에 패널 HTML 주입
+            setTimeout(() => {
+                if (!panelRoot.querySelector('#cl-header')) {
+                    // 패널 껍데기가 없으면 생성
+                    panelRoot.innerHTML = createPanelHTML().replace(
+                        'id="character-lab-panel"',
+                        'id="character-lab-panel" style="position:relative;transform:none;width:100%;border:none;box-shadow:none;height:auto;min-height:500px"'
+                    );
+                    // 닫기 버튼 숨기기 (drawer가 대신 처리)
+                    const closeBtn = panelRoot.querySelector('#cl-close');
+                    if (closeBtn) closeBtn.style.display = 'none';
+
+                    // 이벤트 재바인딩
+                    panelRoot.querySelectorAll('.cl-tab').forEach(btn =>
+                        btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+                    );
+                    panelRoot.querySelectorAll('.cl-madame-subtab').forEach(btn =>
+                        btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab))
+                    );
+                }
+                state.isPanelOpen = true;
+                switchTab('roster');
+                panelRoot.querySelector('.cl-tab[data-tab="roster"]')?.classList.add('active-roster');
+            }, 50);
+        });
+    }
+
+    // ESC 키
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && state.isPanelOpen) state.isPanelOpen = false;
     });
-    document.getElementById('cl-close')?.addEventListener('click', () => {
-        const panel = document.getElementById('character-lab-panel');
-        if (panel) { panel.classList.remove('open'); state.isPanelOpen = false; }
-    });
-    document.querySelectorAll('.cl-tab').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-    document.querySelectorAll('.cl-madame-subtab').forEach(btn => btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab)));
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.isPanelOpen) document.getElementById('cl-close')?.click(); });
 
-    switchTab('roster');
-    document.querySelector('.cl-tab[data-tab="roster"]')?.classList.add('active-roster');
-    console.log(`[${MODULE_NAME}] 초기화 완료`);
+    console.log(`[${MODULE_NAME}] 초기화 완료 — ST Extensions 패널에 등록됨`);
 }
