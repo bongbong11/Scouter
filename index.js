@@ -1178,45 +1178,33 @@ function makeDraggable(panel, handle) {
 export async function onActivate() {
     console.log(`[${MODULE_NAME}] 활성화`);
 
-    // ── 1. 확장 탭 안 설정 패널 (프로필 설정만) ──
-    const settingsHtml = `
-    <div class="inline-drawer" id="scouter-ext-drawer">
+    // ── 1. 확장 탭 안 설정 패널 — RP 플래너와 동일한 방식 ──
+    const { extensionSettings } = SillyTavern.getContext();
+    const profiles = extensionSettings?.['connectionManager']?.profiles || [];
+    const savedProfile = getSettings().selectedProfileName || '';
+    const profileOpts = profiles.map(p =>
+        `<option value="${esc(p.name)}" ${p.name === savedProfile ? 'selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+
+    const settingsHtml = `<div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
             <b>🔴 Scouter</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
-        <div class="inline-drawer-content" id="scouter-ext-settings" style="padding:12px">
-            <div style="font-size:11px;color:#aa6644;margin-bottom:8px;font-family:monospace">연결 프로필 선택</div>
-            <select id="scouter-profile-select" style="width:100%;background:#0f0005;border:1px solid #ffaa0066;border-radius:2px;padding:7px 10px;color:#ffcc88;font-size:12px;font-family:monospace;outline:none;cursor:pointer;margin-bottom:6px">
-                <option value="">현재 연결 그대로 사용</option>
-            </select>
-            <div id="scouter-profile-hint" style="font-size:10px;color:#664433;font-family:monospace">※ Connection Manager에 저장된 프로필을 선택하세요</div>
+        <div class="inline-drawer-content">
+            <div style="padding:8px;display:flex;flex-direction:column;gap:8px">
+                <div style="font-size:0.82rem;color:var(--SmartThemeBodyColor,#ccc)">연결 프로필 선택</div>
+                <select id="scouter-profile-select" class="text_pole" style="width:100%">
+                    <option value="">현재 연결 그대로 사용</option>
+                    ${profileOpts}
+                </select>
+                <div style="font-size:0.76rem;color:var(--SmartThemeQuoteColor,#aaa)">나머지 기능은 🔴 Scouter 버튼에서</div>
+            </div>
         </div>
     </div>`;
 
-    const extTarget = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
-    if (extTarget) extTarget.insertAdjacentHTML('beforeend', settingsHtml);
-
-    // 프로필 드롭다운 채우기
-    function populateProfiles() {
-        const { extensionSettings } = SillyTavern.getContext();
-        const profiles = extensionSettings?.['connectionManager']?.profiles || [];
-        const select = document.getElementById('scouter-profile-select');
-        if (!select) return;
-        const settings = getSettings();
-        // 기존 옵션 유지하고 프로필 추가
-        select.innerHTML = '<option value="">현재 연결 그대로 사용</option>';
-        profiles.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.name;
-            opt.textContent = p.name;
-            if (p.name === settings.selectedProfileName) opt.selected = true;
-            select.appendChild(opt);
-        });
-        const hint = document.getElementById('scouter-profile-hint');
-        if (hint) hint.textContent = profiles.length ? `※ ${profiles.length}개 프로필 로드됨` : '※ Connection Manager에 프로필을 먼저 저장하세요';
-    }
-    populateProfiles();
+    const extTarget = document.getElementById('extensions_settings2') ?? document.getElementById('extensions_settings');
+    extTarget?.insertAdjacentHTML('beforeend', settingsHtml);
 
     document.getElementById('scouter-profile-select')?.addEventListener('change', e => {
         const s = getSettings();
@@ -1225,22 +1213,12 @@ export async function onActivate() {
         toastr.success(e.target.value ? `"${e.target.value}" 프로필 선택됨` : '현재 연결 그대로 사용');
     });
 
-    // ── 2. 마법봉 Extensions 버튼 옆에 Scouter 버튼 추가 ──
-    // ST의 extensions wand 버튼 찾아서 옆에 삽입
-    const wandArea = document.getElementById('extensionsMenu')
-        || document.querySelector('#extension-settings')
-        || document.querySelector('.drawer-icon.fa-magic-wand-sparkles')?.closest('div')
-        || document.getElementById('leftSendForm');
-
-    const scouterBtnHtml = `<div id="scouter-wand-btn" class="drawer-icon fa-solid interactable" title="Scouter — 챗씨부인운명상담소" style="cursor:pointer;display:flex;align-items:center;justify-content:center">
-        <span style="font-size:14px">🔴</span>
+    // ── 2. extensionsMenu에 Scouter 버튼 추가 (RP 플래너 방식과 동일) ──
+    const scouterBtnHtml = `<div id="scouter-wand-btn" title="Scouter — 챗씨부인운명상담소" style="cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:5px;font-size:13px">
+        <span>🔴</span><span>Scouter</span>
     </div>`;
-
-    // extensions 버튼들 있는 상단 아이콘바에 추가
-    const iconBar = document.querySelector('#top-settings-holder')
-        || document.querySelector('.flex-container.flexGap5.marginBot5')
-        || document.querySelector('#leftSendForm');
-    if (iconBar) iconBar.insertAdjacentHTML('beforeend', scouterBtnHtml);
+    const toolbar = document.getElementById('extensionsMenu') ?? document.getElementById('top-bar');
+    toolbar?.insertAdjacentHTML('beforeend', scouterBtnHtml);
 
     // ── 3. 플로팅 창 토글 ──
     function openFloat() {
@@ -1284,3 +1262,9 @@ export async function onActivate() {
 
     console.log(`[${MODULE_NAME}] 초기화 완료`);
 }
+
+// RP 플래너와 동일한 초기화 패턴
+jQuery(async () => {
+    const context = SillyTavern.getContext();
+    context.eventSource.on('app_ready', async () => { await onActivate(); });
+});
