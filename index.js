@@ -454,47 +454,40 @@ function importSTChars() {
     popup.show();
 }
 
-function importPersonas() {
-    const dropdown = document.getElementById('persona-management-dropdown');
-    if (!dropdown) { toastr.warning('페르소나 드롭다운을 찾을 수 없습니다'); return; }
+async function importPersonas() {
+    try {
+        const { power_user } = await import('/scripts/power-user.js');
+        const personas = power_user?.personas || {};
+        const descriptions = power_user?.persona_descriptions || {};
 
-    const options = Array.from(dropdown.options).filter(o => o.value && o.value !== '');
-    if (!options.length) { toastr.warning('등록된 페르소나가 없습니다'); return; }
+        const entries = Object.entries(personas).filter(([, name]) => name && name !== '[Unnamed Persona]');
+        if (!entries.length) { toastr.warning('등록된 페르소나가 없습니다'); return; }
 
-    const list = options.map(o =>
-        `<div class="cl-imp-p" data-name="${esc(o.textContent.trim())}" data-value="${esc(o.value)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #220011;color:#cc9977;font-family:monospace;font-size:12px">${esc(o.textContent.trim())}</div>`
-    ).join('');
+        const list = entries.map(([file, name]) =>
+            `<div class="cl-imp-p" data-file="${esc(file)}" data-name="${esc(name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #220011;color:#cc9977;font-family:monospace;font-size:12px;display:flex;align-items:center;gap:8px">
+                <span>👤</span><span>${esc(name)}</span>
+            </div>`
+        ).join('');
 
-    const { Popup, POPUP_TYPE } = SillyTavern.getContext();
-    const popup = new Popup(
-        `<div style="max-height:300px;overflow-y:auto;background:#0f0010;border:1px solid #440033;border-radius:2px">${list}</div>`,
-        POPUP_TYPE.TEXT, '', { okButton: '닫기' }
-    );
-    setTimeout(() => {
-        document.querySelectorAll('.cl-imp-p').forEach(item => item.addEventListener('click', async () => {
-            const name = item.dataset.name;
-            const value = item.dataset.value;
-
-            // dropdown 선택 변경 후 change 이벤트 발생 → ST가 persona_description 업데이트
-            const prevValue = dropdown.value;
-            dropdown.value = value;
-            dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-
-            // ST가 description 업데이트할 시간 대기
-            await new Promise(r => setTimeout(r, 300));
-
-            const desc = document.getElementById('persona_description')?.value || '';
-            const raw = `페르소나 이름: ${name}\n${desc || '(설명 없음)'}`;
-
-            // 원래 선택으로 복구
-            dropdown.value = prevValue;
-            dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-
-            addCharFromImport(name, raw, 'female');
-            popup.hide?.();
-        }));
-    }, 100);
-    popup.show();
+        const { Popup, POPUP_TYPE } = SillyTavern.getContext();
+        const popup = new Popup(
+            `<div style="max-height:300px;overflow-y:auto;background:#0f0010;border:1px solid #440033;border-radius:2px">${list}</div>`,
+            POPUP_TYPE.TEXT, '', { okButton: '닫기' }
+        );
+        setTimeout(() => {
+            document.querySelectorAll('.cl-imp-p').forEach(item => item.addEventListener('click', () => {
+                const file = item.dataset.file;
+                const name = item.dataset.name;
+                const descObj = descriptions[file] || {};
+                const desc = typeof descObj === 'string' ? descObj : (descObj.description || '');
+                addCharFromImport(name, `페르소나 이름: ${name}\n${desc || '(설명 없음)'}`, 'female');
+                popup.hide?.();
+            }));
+        }, 100);
+        popup.show();
+    } catch (e) {
+        toastr.error(`페르소나 로드 실패: ${e.message}`);
+    }
 }
 
 async function addCharFromImport(name, raw, gender) {
@@ -1041,31 +1034,17 @@ function renderMadameSim(container) {
 function renderSettings(container) {
     const settings = getSettings();
     const { extensionSettings } = SillyTavern.getContext();
-
-    // connection-manager에서 저장된 프로필 목록 읽기
     const profiles = extensionSettings?.['connectionManager']?.profiles || [];
-    const selectedProfileName = settings.selectedProfileName || '';
-
-    const profileOptions = profiles.length
-        ? profiles.map(p =>
-            `<option value="${esc(p.name)}" ${p.name === selectedProfileName ? 'selected' : ''}>${esc(p.name)}</option>`
-          ).join('')
-        : `<option value="">프로필 없음 (현재 연결 사용)</option>`;
+    const currentProfile = settings.selectedProfileName || '현재 연결 그대로';
 
     container.innerHTML = `
-        ${renderDivider('연결 프로필 선택', '#ffaa00')}
-        <div style="background:linear-gradient(135deg,#1a0a00,#0f0500);border:1px solid #ffaa0044;border-radius:2px;padding:13px 14px;margin-bottom:6px">
-            <div style="font-size:10px;color:#886644;margin-bottom:8px;font-family:monospace">ST Connection Manager에 저장된 프로필 목록</div>
-            <select id="cl-profile-select" style="width:100%;background:#0f0005;border:1px solid #ffaa0066;border-radius:2px;padding:8px 10px;color:#ffcc88;font-size:12px;font-family:monospace;outline:none;cursor:pointer">
-                <option value="">현재 연결 그대로 사용</option>
-                ${profileOptions}
-            </select>
-            ${profiles.length === 0 ? `<div style="font-size:10px;color:#664433;margin-top:6px;font-family:monospace">※ Connection Manager 확장에 프로필을 먼저 저장하세요</div>` : ''}
-        </div>
-        <div style="font-size:10px;color:#443322;line-height:1.8;font-family:monospace;background:#0f000a;border:1px solid #220011;border-radius:2px;padding:10px 12px;margin-bottom:20px">
-            ※ 선택한 프로필로 캐릭터 분석·배틀·궁합 AI를 호출합니다<br>
-            ※ "현재 연결 그대로"는 ST에서 활성화된 연결을 사용합니다<br>
-            ※ 프로필 추가는 ST Connection Manager에서 하세요
+        ${renderDivider('연결 프로필', '#ffaa00')}
+        <div style="background:linear-gradient(135deg,#1a0a00,#0f0500);border:1px solid #ffaa0044;border-radius:2px;padding:11px 13px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">🔌</span>
+            <div style="flex:1">
+                <div style="font-size:12px;font-weight:900;color:#ffcc88;font-family:monospace">${esc(currentProfile)}</div>
+                <div style="font-size:10px;color:#664433;margin-top:2px;font-family:monospace">확장 탭 설정에서 변경 가능</div>
+            </div>
         </div>
         ${renderDivider('저장 현황', '#ffaa00')}
         <div style="background:linear-gradient(135deg,#1a0010,#0f000a);border:1px solid #330022;border-radius:2px;padding:14px;margin-bottom:20px">
@@ -1080,22 +1059,14 @@ function renderSettings(container) {
             </div>
         </div>
         <div style="text-align:center;font-size:9px;color:#330022;font-family:monospace;letter-spacing:1px;padding-top:8px;border-top:1px solid #0d0d1a">
-            CHARACTER LAB v1.0<br><span style="color:#220011">챗씨부인운명상담소</span>
+            Scouter v1.0<br><span style="color:#220011">챗씨부인운명상담소</span>
         </div>`;
-
-    // 프로필 선택 저장
-    container.querySelector('#cl-profile-select')?.addEventListener('change', e => {
-        const s = getSettings();
-        s.selectedProfileName = e.target.value || null;
-        save();
-        toastr.success(e.target.value ? `프로필 "${e.target.value}" 선택됨` : '현재 연결 그대로 사용');
-    });
 
     container.querySelector('#cl-export-btn')?.addEventListener('click', () => {
         const s = getSettings(), data = JSON.stringify(s, null, 2),
               blob = new Blob([data], { type: 'application/json' }),
               url = URL.createObjectURL(blob), a = document.createElement('a');
-        a.href = url; a.download = `character-lab-${new Date().toISOString().slice(0, 10)}.json`;
+        a.href = url; a.download = `scouter-${new Date().toISOString().slice(0, 10)}.json`;
         a.click(); URL.revokeObjectURL(url); toastr.success('내보내기 완료');
     });
     container.querySelector('#cl-import-btn')?.addEventListener('click', () => {
@@ -1118,77 +1089,198 @@ function renderSettings(container) {
 }
 
 // ═══════════════════════════════════════════
+// 플로팅 창 HTML
+// ═══════════════════════════════════════════
+function createFloatingPanel() {
+    return `<div id="scouter-float" style="
+        position:fixed; top:60px; right:20px;
+        width:420px; height:80vh;
+        background:#08000f;
+        border:2px solid #aa0033;
+        border-radius:4px;
+        box-shadow:-4px 4px 30px #ff000044;
+        z-index:9999;
+        display:flex; flex-direction:column;
+        resize:both; overflow:hidden;
+        min-width:320px; min-height:400px;
+    ">
+        <!-- 드래그 핸들 -->
+        <div id="scouter-drag-handle" style="
+            background:linear-gradient(90deg,#1a0010,#0d0008);
+            border-bottom:1px solid #aa0033;
+            padding:8px 12px;
+            display:flex; align-items:center; gap:10px;
+            cursor:move; flex-shrink:0; user-select:none;
+        ">
+            <span style="font-size:16px">🔴</span>
+            <div style="flex:1">
+                <div class="cl-shimmer" style="font-weight:900;font-size:14px;letter-spacing:1px;font-family:monospace;background:linear-gradient(90deg,#ff4444,#ff9900,#ff66aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent">CHARACTER LAB</div>
+                <div style="font-size:8px;color:#440022;letter-spacing:2px;font-family:monospace">SCOUTER · 챗씨부인운명상담소</div>
+            </div>
+            <div style="display:flex;gap:4px;align-items:center">
+                <span class="cl-blink" style="color:#ff2200;font-size:7px">●</span>
+                <span class="cl-blink" style="color:#ffaa00;font-size:7px;animation-delay:.3s">●</span>
+                <span class="cl-blink" style="color:#cc44ff;font-size:7px;animation-delay:.6s">●</span>
+                <button id="scouter-close" style="background:none;border:1px solid #440022;border-radius:3px;color:#664433;cursor:pointer;font-size:12px;padding:2px 7px;margin-left:4px;font-family:monospace">✕</button>
+            </div>
+        </div>
+        <!-- 탭 -->
+        <div id="cl-tabs" style="display:flex;background:linear-gradient(180deg,#0d0d20,#050510);border-bottom:1px solid #1e1e3a;flex-shrink:0">
+            <button class="cl-tab" data-tab="roster">👤 캐릭터</button>
+            <button class="cl-tab" data-tab="battle">⚔️ 배틀</button>
+            <button class="cl-tab" data-tab="madame">🔮 마담뚜</button>
+            <button class="cl-tab" data-tab="settings">⚙️ 설정</button>
+        </div>
+        <div id="cl-madame-subtabs" style="display:none;flex-shrink:0">
+            <button class="cl-madame-subtab" data-subtab="compat">💘 궁합</button>
+            <button class="cl-madame-subtab" data-subtab="sim">🎲 시뮬</button>
+        </div>
+        <!-- 콘텐츠 -->
+        <div id="cl-content" style="flex:1;overflow-y:auto;overflow-x:hidden">
+            <div class="cl-pane" id="cl-pane-roster"></div>
+            <div class="cl-pane" id="cl-pane-battle"></div>
+            <div class="cl-pane" id="cl-pane-madame-compat"></div>
+            <div class="cl-pane" id="cl-pane-madame-sim"></div>
+            <div class="cl-pane" id="cl-pane-settings"></div>
+        </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════
+// 드래그 기능
+// ═══════════════════════════════════════════
+function makeDraggable(panel, handle) {
+    let isDragging = false, startX, startY, startLeft, startTop;
+    handle.addEventListener('mousedown', e => {
+        if (e.target.id === 'scouter-close') return;
+        isDragging = true;
+        startX = e.clientX; startY = e.clientY;
+        const rect = panel.getBoundingClientRect();
+        startLeft = rect.left; startTop = rect.top;
+        panel.style.right = 'auto';
+        document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX, dy = e.clientY - startY;
+        panel.style.left = Math.max(0, startLeft + dx) + 'px';
+        panel.style.top = Math.max(0, startTop + dy) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        document.body.style.userSelect = '';
+    });
+}
+
+// ═══════════════════════════════════════════
 // 초기화
 // ═══════════════════════════════════════════
 export async function onActivate() {
     console.log(`[${MODULE_NAME}] 활성화`);
 
-    // ST Extensions 패널에 inline-drawer 형식으로 inject
-    const drawerHtml = `
-    <div class="inline-drawer" id="scouter-drawer">
-        <div class="inline-drawer-toggle inline-drawer-header" id="scouter-drawer-toggle">
+    // ── 1. 확장 탭 안 설정 패널 (프로필 설정만) ──
+    const settingsHtml = `
+    <div class="inline-drawer" id="scouter-ext-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
             <b>🔴 Scouter</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
-        <div class="inline-drawer-content" id="scouter-drawer-content" style="padding:0">
-            <!-- 패널은 열릴 때 렌더링 -->
-            <div id="scouter-panel-root" style="min-height:200px"></div>
+        <div class="inline-drawer-content" id="scouter-ext-settings" style="padding:12px">
+            <div style="font-size:11px;color:#aa6644;margin-bottom:8px;font-family:monospace">연결 프로필 선택</div>
+            <select id="scouter-profile-select" style="width:100%;background:#0f0005;border:1px solid #ffaa0066;border-radius:2px;padding:7px 10px;color:#ffcc88;font-size:12px;font-family:monospace;outline:none;cursor:pointer;margin-bottom:6px">
+                <option value="">현재 연결 그대로 사용</option>
+            </select>
+            <div id="scouter-profile-hint" style="font-size:10px;color:#664433;font-family:monospace">※ Connection Manager에 저장된 프로필을 선택하세요</div>
         </div>
     </div>`;
 
-    // extensions_settings2 가 있으면 거기, 없으면 extensions_settings
-    const target = document.getElementById('extensions_settings2')
-        || document.getElementById('extensions_settings');
-    if (target) {
-        target.insertAdjacentHTML('beforeend', drawerHtml);
-    } else {
-        // fallback: body에 슬라이드 패널 방식
-        document.body.insertAdjacentHTML('beforeend', createPanelHTML());
-        document.getElementById('cl-close')?.addEventListener('click', () => {
-            document.getElementById('character-lab-panel')?.classList.remove('open');
-            state.isPanelOpen = false;
+    const extTarget = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
+    if (extTarget) extTarget.insertAdjacentHTML('beforeend', settingsHtml);
+
+    // 프로필 드롭다운 채우기
+    function populateProfiles() {
+        const { extensionSettings } = SillyTavern.getContext();
+        const profiles = extensionSettings?.['connectionManager']?.profiles || [];
+        const select = document.getElementById('scouter-profile-select');
+        if (!select) return;
+        const settings = getSettings();
+        // 기존 옵션 유지하고 프로필 추가
+        select.innerHTML = '<option value="">현재 연결 그대로 사용</option>';
+        profiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = p.name;
+            if (p.name === settings.selectedProfileName) opt.selected = true;
+            select.appendChild(opt);
         });
+        const hint = document.getElementById('scouter-profile-hint');
+        if (hint) hint.textContent = profiles.length ? `※ ${profiles.length}개 프로필 로드됨` : '※ Connection Manager에 프로필을 먼저 저장하세요';
     }
+    populateProfiles();
 
-    // drawer 토글 — 열릴 때 패널 렌더링
-    const drawerToggle = document.getElementById('scouter-drawer-toggle');
-    const drawerContent = document.getElementById('scouter-drawer-content');
-    const panelRoot = document.getElementById('scouter-panel-root');
-
-    if (drawerToggle && panelRoot) {
-        // ST inline-drawer 클릭 시 패널 주입
-        drawerToggle.addEventListener('click', () => {
-            // drawer가 열리는 타이밍에 패널 HTML 주입
-            setTimeout(() => {
-                if (!panelRoot.querySelector('#cl-header')) {
-                    // 패널 껍데기가 없으면 생성
-                    panelRoot.innerHTML = createPanelHTML().replace(
-                        'id="character-lab-panel"',
-                        'id="character-lab-panel" style="position:relative;transform:none;width:100%;border:none;box-shadow:none;height:auto;min-height:500px"'
-                    );
-                    // 닫기 버튼 숨기기 (drawer가 대신 처리)
-                    const closeBtn = panelRoot.querySelector('#cl-close');
-                    if (closeBtn) closeBtn.style.display = 'none';
-
-                    // 이벤트 재바인딩
-                    panelRoot.querySelectorAll('.cl-tab').forEach(btn =>
-                        btn.addEventListener('click', () => switchTab(btn.dataset.tab))
-                    );
-                    panelRoot.querySelectorAll('.cl-madame-subtab').forEach(btn =>
-                        btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab))
-                    );
-                }
-                state.isPanelOpen = true;
-                switchTab('roster');
-                panelRoot.querySelector('.cl-tab[data-tab="roster"]')?.classList.add('active-roster');
-            }, 50);
-        });
-    }
-
-    // ESC 키
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && state.isPanelOpen) state.isPanelOpen = false;
+    document.getElementById('scouter-profile-select')?.addEventListener('change', e => {
+        const s = getSettings();
+        s.selectedProfileName = e.target.value || null;
+        save();
+        toastr.success(e.target.value ? `"${e.target.value}" 프로필 선택됨` : '현재 연결 그대로 사용');
     });
 
-    console.log(`[${MODULE_NAME}] 초기화 완료 — ST Extensions 패널에 등록됨`);
+    // ── 2. 마법봉 Extensions 버튼 옆에 Scouter 버튼 추가 ──
+    // ST의 extensions wand 버튼 찾아서 옆에 삽입
+    const wandArea = document.getElementById('extensionsMenu')
+        || document.querySelector('#extension-settings')
+        || document.querySelector('.drawer-icon.fa-magic-wand-sparkles')?.closest('div')
+        || document.getElementById('leftSendForm');
+
+    const scouterBtnHtml = `<div id="scouter-wand-btn" class="drawer-icon fa-solid interactable" title="Scouter — 챗씨부인운명상담소" style="cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <span style="font-size:14px">🔴</span>
+    </div>`;
+
+    // extensions 버튼들 있는 상단 아이콘바에 추가
+    const iconBar = document.querySelector('#top-settings-holder')
+        || document.querySelector('.flex-container.flexGap5.marginBot5')
+        || document.querySelector('#leftSendForm');
+    if (iconBar) iconBar.insertAdjacentHTML('beforeend', scouterBtnHtml);
+
+    // ── 3. 플로팅 창 토글 ──
+    function openFloat() {
+        if (document.getElementById('scouter-float')) return;
+        document.body.insertAdjacentHTML('beforeend', createFloatingPanel());
+
+        const panel = document.getElementById('scouter-float');
+        const handle = document.getElementById('scouter-drag-handle');
+        makeDraggable(panel, handle);
+
+        // 탭 이벤트
+        panel.querySelectorAll('.cl-tab').forEach(btn =>
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+        );
+        panel.querySelectorAll('.cl-madame-subtab').forEach(btn =>
+            btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab))
+        );
+        document.getElementById('scouter-close')?.addEventListener('click', closeFloat);
+
+        state.isPanelOpen = true;
+        switchTab('roster');
+        panel.querySelector('.cl-tab[data-tab="roster"]')?.classList.add('active-roster');
+    }
+
+    function closeFloat() {
+        document.getElementById('scouter-float')?.remove();
+        state.isPanelOpen = false;
+    }
+
+    function toggleFloat() {
+        if (document.getElementById('scouter-float')) closeFloat();
+        else openFloat();
+    }
+
+    document.getElementById('scouter-wand-btn')?.addEventListener('click', toggleFloat);
+
+    // ESC로 닫기
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && state.isPanelOpen) closeFloat();
+    });
+
+    console.log(`[${MODULE_NAME}] 초기화 완료`);
 }
