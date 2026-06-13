@@ -1,0 +1,15 @@
+{
+    "display_name": "Scouter",
+    "loading_order": 10,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "봉봉",
+    "version": "1.0.0",
+    "homePage": "https://github.com/your/scouter",
+    "auto_update": false,
+    "hooks": {
+        "activate": "onActivate"
+    }
+}
