@@ -11,13 +11,11 @@
  */
 
 export const PROMPT_META = {
-    analyze:  { icon: '🔬', label: '캐릭터 분석',   desc: 'Parses character sheet into JSON stats+profile. Variables: {{name}} {{gender}} {{sheet}}' },
-    combat:   { icon: '⚔️', label: '육탄전 (포켓몬)',desc: 'Pokemon-style physical battle. Variables: {{fighters}} {{condition}}' },
-    roast:    { icon: '🗣️', label: '말싸움 (포켓몬)',desc: 'Pokemon-style verbal battle. Variables: {{fighters}} {{condition}}' },
-    combatS:  { icon: '📊', label: '배틀 (시리어스)', desc: 'Serious combat analysis. Variables: {{fighters}} {{condition}}' },
+    analyze:  { icon: '🔬', label: '캐릭터 분석',   desc: 'Parses character sheet into JSON. Variables: {{name}} {{gender}} {{sheet}}' },
+    combat:   { icon: '⚔️', label: '배틀 분석',     desc: 'Serious combat/conflict analysis. Variables: {{fighters}} {{condition}}' },
     compat:   { icon: '💘', label: '궁합 분석',      desc: '챗씨부인 compatibility. Variables: {{castDesc}} {{genderNote}} {{structureNote}} {{multiLine}} {{triBlock}} {{sameGenderMode}} {{kinkSection}}' },
     scenario: { icon: '📖', label: '롤플 시나리오',  desc: 'RP scenario generator. Variables: {{castDesc}} {{compatResult}}' },
-    sim:      { icon: '🎲', label: '상황 시뮬',      desc: 'Situation simulator. Variables: {{castDesc}} {{situation}}' },
+    sim:      { icon: '🎲', label: '관계 시뮬',      desc: 'Romance/chemistry situation sim. Variables: {{castDesc}} {{situation}}' },
 };
 
 export const DEFAULT_PROMPTS = {
@@ -59,85 +57,46 @@ Return ONLY this JSON object (absolutely no other text):
     "charisma": 0-100
   },
   "intimacy": {
-    "physique": "체형 및 신체적 특징 상세 묘사 — 시트에 언급된 내용 그대로. 없으면 외형에서 추론하여 구체적으로 작성",
-    "desire": "이 캐릭터가 친밀한 상황에서 끌리는 것, 자극받는 상황/행동/분위기 — 시트에 없으면 성격에서 추론하여 반드시 작성",
-    "style": "친밀한 관계에서의 성향과 스타일 — dominant/submissive/switch/aggressive/possessive/tender/playful 등. 성격 기반으로 반드시 추론",
-    "preference": "좋아하는 분위기, 상황, 관계 역학 — 성격/행동 패턴 기반으로 반드시 작성"
+    "physique": "시트에 언급된 신체 관련 묘사를 그대로 옮길 것. 언급 없으면 외형 묘사에서 체형/신체 특징만 간략히",
+    "desire": "시트에 명시된 취향/선호/끌리는 것을 그대로 옮길 것. 언급 없으면 빈 문자열",
+    "style": "시트에 명시된 성향/태도를 그대로 옮길 것. 언급 없으면 성격에서 dominant/submissive/switch 중 하나만",
+    "preference": "시트에 명시된 선호 상황/분위기를 그대로 옮길 것. 언급 없으면 빈 문자열"
   }
 }
 
 Rules:
-- "intimacy" fields: always infer from personality/appearance if not in sheet. Writing "없음" is not allowed.
+- "intimacy" fields: extract directly from sheet. If not mentioned, use empty string or minimal inference from appearance only.
 - stats.sex = physical attractiveness + charismatic appeal score
 - All text values in Korean.
 - Stats must be meaningfully differentiated.` }] },
 
     // ─────────────────────────────────────────
-    // 육탄전 배틀 (포켓몬 스타일)
+    // 배틀 분석
     // ─────────────────────────────────────────
-    combat: { active: 0, slots: [{ name: '포켓몬',
+    combat: { active: 0, slots: [{ name: '기본',
         system:
-`당신은 캐릭터 육탄전 배틀 내레이터입니다.
-포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다.
-각 캐릭터의 신체 능력과 전투 수치를 반영해서 현실감 있게 진행하세요.
-마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.`,
+`You are a serious combat and conflict analyst. Analyze the given characters and determine the likely outcome based on their stats, personality, and traits. Write in Korean. Be analytical, specific, and realistic.
+If a verbal/argument condition is given, focus on that angle. Otherwise analyze physical confrontation.`,
         user:
-`{{condition}}
+`조건/상황: {{condition}}
 
 참가자:
 {{fighters}}
 
-포켓몬 배틀 UI 스타일로 10~15행 내외.
-"캐릭터명이(가) 기술을 사용했다!", "급소에 맞았다!", "효과가 굉장하다!", "야생의 X이(가) 나타났다!" 등 게임 텍스트 적극 사용.
-캐릭터 성격 반영.
-마지막 줄: 【승자: 이름】` }] },
-
-    // ─────────────────────────────────────────
-    // 말싸움 배틀 (포켓몬 스타일)
-    // ─────────────────────────────────────────
-    roast: { active: 0, slots: [{ name: '포켓몬',
-        system:
-`당신은 캐릭터 말싸움 배틀 내레이터입니다.
-포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다.
-각 캐릭터의 성격과 언변 수치를 반영해서 현실감 있게 진행하세요.
-마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.`,
-        user:
-`{{condition}}
-
-참가자:
-{{fighters}}
-
-포켓몬 배틀 UI 스타일로 10~15행 내외.
-캐릭터명: "대사" 형식으로 말싸움 진행.
-"급소에 맞았다!", "효과가 굉장하다!", "말빨이 통했다!" 등 게임 텍스트 적극 사용.
-캐릭터 성격/언변 수치 반영.
-마지막 줄: 【승자: 이름】` }] },
-
-    // ─────────────────────────────────────────
-    // 배틀 시리어스 분석
-    // ─────────────────────────────────────────
-    combatS: { active: 0, slots: [{ name: '시리어스',
-        system:
-`You are a serious combat/conflict analyst. Analyze the given characters objectively and determine the likely outcome based on their stats, personality, and traits. Write in Korean. Be analytical, specific, and detailed.`,
-        user:
-`Condition/context: {{condition}}
-
-Participants:
-{{fighters}}
-
-Provide a serious analytical report in Korean:
+아래 순서로 분석 리포트를 작성하라:
 
 ⚔️ 【전력 분석】
-각 캐릭터의 강점과 약점을 수치 기반으로 상세 분석 (각 3-4문장)
+각 캐릭터의 강점과 약점을 수치 기반으로 분석 (각 2-3문장)
 
 🧮 【전황 시뮬레이션】
-실제로 이 상황이 벌어진다면 어떻게 전개될지 단계별로 구체적으로 (5-7문장)
+이 상황이 실제로 벌어진다면 어떻게 전개될지 단계별로 (4-6문장)
+조건에 말다툼/언쟁이 포함되면 그 흐름도 반영할 것
 
 ⚖️ 【변수 분석】
-승부를 뒤집을 수 있는 변수/돌발 상황 (2-3문장)
+승부를 뒤집을 수 있는 변수나 돌발 상황 (1-2문장)
 
-🏆 【결론: 승자 예측】
-승자와 그 근거를 명확하게 서술.
+🏆 【결론】
+승자와 그 근거를 명확하게.
 마지막 줄: 【최종 승자: 이름 (승률 XX%)】` }] },
 
     // ─────────────────────────────────────────
@@ -240,20 +199,28 @@ Provide a serious analytical report in Korean:
     // ─────────────────────────────────────────
     sim: { active: 0, slots: [{ name: '기본',
         system:
-`당신은 롤플레이 시뮬레이터입니다.
-주어진 상황에서 캐릭터들이 어떻게 반응하고 상황이 어떻게 전개될지 현실감 있게 시뮬레이션합니다.
-캐릭터 성격을 충실히 반영하고, 대화와 행동을 섞어 소설체로 씁니다.`,
+`당신은 로맨스/관계 시뮬레이터입니다.
+주어진 두 캐릭터가 특정 상황에서 어떻게 반응하고 관계가 어떻게 흘러가는지 시뮬레이션합니다.
+두 사람의 케미와 궁합을 중심으로 — 좋으면 좋은 대로, 나쁘면 싸우거나 어색한 대로 현실감 있게.
+소설체로 쓰되 두 캐릭터의 내면 반응과 감정 변화도 담을 것.
+마지막에 이 두 캐릭터로 롤플레이를 시작하고 싶은 사람을 위한 짧은 가이드를 붙일 것.`,
         user:
-`다음 캐릭터들이 주어진 상황에서 어떻게 행동하는지 시뮬레이션하라.
-
-캐릭터:
+`캐릭터:
 {{castDesc}}
 
 상황: {{situation}}
 
-출력 형식:
-- 소설체로, 대화와 행동/심리 묘사 섞어서
-- 각 캐릭터의 성격이 확실히 드러나게
-- 300~500자 내외
-- 마지막에 【이 상황의 결과】 한 줄로 요약` }] },
+아래 순서로 출력하라:
+
+【장면 시뮬레이션】
+(두 사람이 이 상황에서 어떻게 반응하는지 소설체로. 대화와 행동, 내면 심리 섞어서. 400~600자. 케미가 좋으면 좋은 분위기로, 나쁘면 싸우거나 어색한 것도 그대로.)
+
+【이 상황의 결말】
+(이 만남이 어떻게 끝나는지 한 줄. 긍정적일 수도, 부정적일 수도 있음.)
+
+【롤플 길잡이】
+이 두 캐릭터로 롤플을 시작한다면:
+- 추천 시작 장면: (구체적인 첫 장면 묘사 1-2문장)
+- 분위기 키워드: (3-5개)
+- 주의할 점: (이 두 사람의 케미상 롤플할 때 살려야 할 포인트 1-2문장)` }] },
 };
