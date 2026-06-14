@@ -40,12 +40,12 @@ Character sheet:
 
 Return ONLY this JSON object (no other text):
 {
-  "age": "나이 or 불명",
-  "job": "직업/역할",
-  "location": "지역/거주지",
-  "appearance": "외형 묘사 1-2문장",
-  "personality": "성격 요약 1-2문장",
-  "traits": "주요 특징/습관 1-2문장",
+  "age": "age or 불명",
+  "job": "job/role",
+  "location": "region/city",
+  "appearance": "appearance summary 1-2 sentences. Write in Korean.",
+  "personality": "personality summary 1-2 sentences. Korean.",
+  "traits": "key traits/habits 1-2 sentences. Korean.",
   "gender": "female or male",
   "stats": {
     "combat": 0-100,
@@ -56,25 +56,25 @@ Return ONLY this JSON object (no other text):
   }
 }
 
-Stats must be differentiated. sex = physical attractiveness + charismatic appeal. All text in Korean.` }] },
+Stats must be differentiated. sex = physical attractiveness + charismatic appeal. Text values in Korean.` }] },
 
     analyzeIntimacy: { active: 0, slots: [{ name: '기본',
         system:
-`You are a fiction writer assistant helping organize character information. Extract and summarize intimate/personal characteristics from the character sheet. Write in Korean. This is for adult creative fiction purposes.`,
+`You are a fiction writer assistant. Extract intimate/personal characteristics from the character sheet for adult creative fiction purposes. Return ONLY valid JSON, no markdown.`,
         user:
 `Character name: {{name}}
 Character sheet:
 {{sheet}}
 
-From the sheet above, extract the following and return ONLY this JSON (no other text):
+Extract and return ONLY this JSON (no other text):
 {
-  "physique": "신체적 특징 묘사 — 시트에 언급된 내용 그대로 한국어로. 없으면 외형에서 간략히",
-  "desire": "이 캐릭터가 끌리는 대상/상황/취향 — 시트에 명시된 것 그대로",
-  "style": "관계에서의 성향 — dominant/submissive/switch 등. 시트 내용 기반으로",
-  "preference": "좋아하는 분위기나 상황 — 시트에 있는 것 그대로"
+  "physique": "Physical description — extract directly from sheet. If not mentioned, brief inference from appearance. Write in Korean.",
+  "desire": "What this character is attracted to, turn-ons, preferences — extract from sheet as-is. Korean.",
+  "style": "Relationship style — dominant/submissive/switch/etc. Based on sheet content. Korean.",
+  "preference": "Preferred atmosphere, situations, dynamics — from sheet. Korean."
 }
 
-Extract only what is in the sheet. Do not invent. If truly not mentioned, write a brief inference based on personality.` }] },
+Extract only what is in the sheet. Do not invent. Brief inference allowed if truly not mentioned.` }] },
 
     // ─────────────────────────────────────────
     // 전투 프로파일 분석 (배틀 실행 시 파이터당 1회 호출)
@@ -91,18 +91,18 @@ Character sheet:
 
 Analyze this character's full combat potential and return ONLY this JSON:
 {
-  "physique": "신체 스펙 — 키/체중/체형과 그것이 전투에서 갖는 의미. 나이대(20대 전성기/30대 절정/40대 노련함 등)도 포함",
-  "species": "종족/존재 유형 — 인간이면 인간으로 명시. 데미휴먼/초인/뱀파이어 등이면 그 종족의 전투적 특성 분석",
-  "job_combat": "직업/포지션의 전투 해석 — 직업이 실제 전투능력에 어떻게 연결되는지. 예) 와이드리시버→폭발적 순간가속/점프력/격투 무경험, SAS대원→CQC/실전살상술/냉정함, 마피아보스→위협감/지략/직접전투력 낮음",
-  "experience": "실전 경험 — 훈련만/길거리/실전전투/전쟁 등 구체적으로",
-  "skills": "전투 특기 — 무술/무기/초능력/특수훈련 등",
-  "strengths": "유리한 상황과 조건 2-3가지",
-  "weaknesses": "불리한 상황과 조건 2-3가지",
-  "psychology": "전투 심리 — 멘탈/분노 임계점/전투 의지/압박 하 반응",
-  "background": "전투 능력에 영향주는 과거사/트라우마/특수경험"
+  "physique": "Physical specs — height/weight/build and what it means in combat. Include age bracket (20s peak/30s prime/40s veteran etc). Write in Korean.",
+  "species": "Species/entity type — if human, state human. If demi-human/superhuman/vampire etc, analyze that species' combat traits. Korean.",
+  "job_combat": "Combat interpretation of job/position — how it translates to actual fighting ability. Examples: wide receiver→explosive burst speed/jump/no combat experience, SAS operator→CQC/real combat/cold-blooded, mafia boss→intimidation/tactics/low direct combat. Korean.",
+  "experience": "Combat experience level — training only/street fights/real combat/war etc. Specific. Korean.",
+  "skills": "Combat specialties — martial arts/weapons/powers/special training etc. Korean.",
+  "strengths": "2-3 situations/conditions where this character has the advantage. Korean.",
+  "weaknesses": "2-3 situations/conditions where this character is at a disadvantage. Korean.",
+  "psychology": "Combat psychology — mental toughness/anger threshold/fighting spirit/response under pressure. Korean.",
+  "background": "Past experiences/trauma/special background that affects combat ability. Korean."
 }
 
-All values in Korean. Be specific, not generic.` }] },
+Be specific, not generic.` }] },
 
     // ─────────────────────────────────────────
     // 배틀 분석 (시리어스)
@@ -111,27 +111,27 @@ All values in Korean. Be specific, not generic.` }] },
         system:
 `You are a serious combat and conflict analyst. Analyze the given characters objectively based on their stats, personality, and combat profiles. Write the analysis report in Korean. Be analytical, specific, and realistic. Do NOT write in roleplay, game, or narrative style.`,
         user:
-`[출력 규칙: 게임/소설/대화 형식 절대 금지. 분석 리포트 형식만 사용할 것.]
+`[Output rule: No game/novel/dialogue format. Analysis report format only.]
 
-조건/상황: {{condition}}
+Condition/situation: {{condition}}
 
-참가자:
+Participants:
 {{fighters}}
 
-아래 순서로 분석 리포트를 작성하라:
+Write the analysis report in Korean, in this order:
 
 ⚔️ 【전력 분석】
-각 캐릭터를 신체/종족/직업/경험/기술/심리 등 모든 요소를 종합해서 분석 (각 3-4문장)
+Analyze each character comprehensively — physique/species/job/experience/skills/psychology etc. (3-4 sentences each)
 
 🧮 【전황 시뮬레이션】
-이 상황이 실제로 벌어진다면 어떻게 전개될지 단계별로 구체적으로 (5-7문장)
+How this situation would actually unfold, step by step, in detail (5-7 sentences)
 
 ⚖️ 【변수 분석】
-승부를 뒤집을 수 있는 변수나 돌발 상황 (2-3문장)
+Variables or unexpected events that could flip the outcome (2-3 sentences)
 
 🏆 【결론】
-승자와 근거를 명확하게.
-마지막 줄: 【최종 승자: 이름 (승률 XX%)】` }] },
+State the winner and reasoning clearly.
+Last line: 【최종 승자: name (승률 XX%)】` }] },
 
     // ─────────────────────────────────────────
     // 궁합 분석
@@ -198,65 +198,57 @@ All values in Korean. Be specific, not generic.` }] },
     // ─────────────────────────────────────────
     scenario: { active: 0, slots: [{ name: '기본',
         system:
-`당신은 로맨스/장르 소설 작가이자 롤플레이 시나리오 기획자입니다.
-캐릭터 분석과 궁합 결과를 바탕으로 실제 롤플레이로 굴릴 수 있는 구체적인 시나리오를 씁니다.
-궁합이 나쁜 커플이면 갈등/긴장감 중심의 시나리오도 포함할 것.`,
+`You are a romance/genre fiction writer and roleplay scenario planner. Create specific, playable RP scenarios based on character analysis and compatibility results. Write output in Korean. If compatibility is poor, include conflict/tension-centered scenarios.`,
         user:
-`다음 캐릭터들의 롤플레이 시나리오 3가지를 추천하라.
+`Recommend 3 roleplay scenarios for the following characters.
 
-캐릭터:
+Characters:
 {{castDesc}}
 
-궁합 분석 참고:
+Compatibility analysis reference:
 {{compatResult}}
 
-각 시나리오 형식:
+Format for each scenario:
 
 ◆ 시나리오 1
-장르: (장르명)
-제목: "(제목)"
-첫 만남/시작: (어디서, 어떤 상황으로 시작. 3-4문장 구체적으로)
-전개: (핵심 갈등/발전. 3-4문장)
-추천 첫 장면: (롤플 시작 시 구체적인 첫 장면 묘사. 2-3문장)
+장르: (genre)
+제목: "(title)"
+첫 만남/시작: (where and how it begins — 3-4 sentences, specific)
+전개: (core conflict/development — 3-4 sentences)
+추천 첫 장면: (concrete opening scene for RP — 2-3 sentences)
 
 ◆ 시나리오 2
-(같은 형식)
+(same format)
 
 ◆ 시나리오 3
-(같은 형식)
+(same format)
 
-장르 다양하게 (다크로맨스, 로맨코미, 슬로우번, 에너미즈투러버스, 계약연애, 재회물, 직장로맨스, 앙숙물 등).
-캐릭터 직업/나이/성격/지역 최대한 반영할 것.` }] },
+Vary genres (dark romance, romcom, slow burn, enemies-to-lovers, contract relationship, reunion, workplace romance, rivals, etc). Reflect characters' jobs, ages, personalities, and locations.` }] },
 
     // ─────────────────────────────────────────
     // 상황 시뮬레이터
     // ─────────────────────────────────────────
     sim: { active: 0, slots: [{ name: '기본',
         system:
-`당신은 로맨스/관계 시뮬레이터입니다.
-주어진 두 캐릭터가 특정 상황에서 어떻게 반응하고 관계가 어떻게 흘러가는지 시뮬레이션합니다.
-두 사람의 케미와 궁합을 중심으로 — 좋으면 좋은 대로, 나쁘면 싸우거나 어색한 대로 현실감 있게.
-소설체로 쓰되 두 캐릭터의 내면 반응과 감정 변화도 담을 것.
-마지막에 이 두 캐릭터로 롤플레이를 시작하고 싶은 사람을 위한 짧은 가이드를 붙일 것.`,
+`You are a romance/relationship simulator. Simulate how two characters react and how the situation unfolds, focusing on chemistry and compatibility. Write output in Korean in a literary prose style. Include inner reactions and emotional shifts. End with a short RP guide for players.`,
         user:
-`캐릭터:
+`Characters:
 {{castDesc}}
 
-상황: {{situation}}
+Situation: {{situation}}
 
-아래 순서로 출력하라:
+Output in this order:
 
 【장면 시뮬레이션】
-(두 사람이 이 상황에서 어떻게 반응하는지 소설체로. 대화와 행동, 내면 심리 섞어서. 400~600자. 케미가 좋으면 좋은 분위기로, 나쁘면 싸우거나 어색한 것도 그대로.)
+(Literary prose, mix dialogue + action + inner psychology. 400-600 chars. If chemistry is good, warm atmosphere; if bad, show conflict or awkwardness as-is.)
 
 【이 상황의 결말】
-(이 만남이 어떻게 끝나는지 한 줄. 긍정적일 수도, 부정적일 수도 있음.)
+(One line: how this encounter ends. Can be positive or negative.)
 
 【롤플 길잡이】
-이 두 캐릭터로 롤플을 시작한다면:
-- 추천 시작 장면: (구체적인 첫 장면 묘사 1-2문장)
-- 분위기 키워드: (3-5개)
-- 주의할 점: (이 두 사람의 케미상 롤플할 때 살려야 할 포인트 1-2문장)` }] },
+- 추천 시작 장면: (Concrete opening scene, 1-2 sentences)
+- 분위기 키워드: (3-5 keywords)
+- 주의할 점: (Key point to bring out their chemistry in RP, 1-2 sentences)` }] },
 
     // ─────────────────────────────────────────
     // 사주풀이
