@@ -81,10 +81,11 @@ Extract only what is in the sheet. Do not invent. If truly not mentioned, write 
     // ─────────────────────────────────────────
     combat: { active: 0, slots: [{ name: '기본',
         system:
-`당신은 전문 전투/갈등 분석가입니다. 주어진 캐릭터들을 객관적으로 분석하여 현실적인 리포트를 작성합니다.
-분석적이고 구체적인 문장으로 작성하세요. 한국어로 작성하세요.`,
+`You are a serious combat and conflict analyst. Analyze the given characters objectively based on their stats, personality, and traits. Write the analysis report in Korean. Be analytical, specific, and realistic. Do NOT write in roleplay, game, or narrative style.`,
         user:
-`조건/상황: {{condition}}
+`[출력 규칙: 게임/소설/대화 형식 절대 금지. 아래 분석 리포트 형식만 사용할 것.]
+
+조건/상황: {{condition}}
 
 참가자:
 {{fighters}}
