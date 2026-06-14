@@ -11,22 +11,22 @@ const MODULE_NAME = 'character_lab';
 // 상수
 // ═══════════════════════════════════════════
 const STAT_META = {
-    combat:   { label: '⚔️ 전투력',   color: '#c0824a' },
-    roast:    { label: '🗣️ 언변',     color: '#b87333' },
-    sex:      { label: '🔥 성적매력', color: '#a0522d' },
-    mental:   { label: '🧠 정신력',   color: '#8b6914' },
-    charisma: { label: '👑 카리스마', color: '#cd853f' },
+    combat:   { label: '⚔️ 전투력',   color: '#ff2200' },
+    roast:    { label: '🗣️ 언변',     color: '#ff8800' },
+    sex:      { label: '🔥 성적매력', color: '#ff1177' },
+    mental:   { label: '🧠 정신력',   color: '#9900ff' },
+    charisma: { label: '👑 카리스마', color: '#ffaa00' },
 };
 const GENDER_SECTIONS = [
-    { id: 'female', label: '♀ 여성', color: '#c87070' },
-    { id: 'male',   label: '♂ 남성', color: '#7090b8' },
+    { id: 'female', label: '♀ 여성', color: '#ff44aa' },
+    { id: 'male',   label: '♂ 남성', color: '#4488ff' },
 ];
 const RANK_THRESHOLDS = [
-    { min: 430, label: '신급 ★★★★★', color: '#d4a017' },
-    { min: 380, label: '초인급 ★★★★', color: '#c0824a' },
-    { min: 320, label: '엘리트 ★★★',  color: '#a0522d' },
-    { min: 260, label: '강자 ★★',     color: '#7090b8' },
-    { min: 0,   label: '범인 ★',      color: '#7a6a5a' },
+    { min: 430, label: '신급 ★★★★★', color: '#fff700' },
+    { min: 380, label: '초인급 ★★★★', color: '#ff8800' },
+    { min: 320, label: '엘리트 ★★★',  color: '#ff2200' },
+    { min: 260, label: '강자 ★★',     color: '#4488ff' },
+    { min: 0,   label: '범인 ★',      color: '#664466' },
 ];
 
 // ═══════════════════════════════════════════
@@ -325,12 +325,12 @@ function injectLoadingCSS() {
 
 // ═══════════════════════════════════════════
 const C = {
-    bg: '#1a1410', bgCard: '#221c16', bgDeep: '#0f0c08',
-    border: '#3d2e20', borderLight: '#5a4030',
-    text: '#c8aa88', textDim: '#7a6a55', textBright: '#e8d0a8',
-    accent: '#c0824a', accentDim: '#8b5e35',
-    female: '#c87070', male: '#7090b8',
-    purple: '#9070b0', gold: '#d4a017',
+    bg: '#08000f', bgCard: '#0f0015', bgDeep: '#050008',
+    border: '#330055', borderLight: '#660088',
+    text: '#cc99cc', textDim: '#664466', textBright: '#ffccff',
+    accent: '#cc44ff', accentDim: '#8800cc',
+    female: '#ff44aa', male: '#4488ff',
+    purple: '#cc44ff', gold: '#ffaa00',
 };
 
 function renderAvatar(name, gender, size = 44) {
@@ -388,9 +388,9 @@ function createFloatingPanel() {
         position:fixed; top:60px; right:20px;
         width:min(420px,95vw); height:80vh;
         background:${C.bg};
-        border:1px solid ${C.border};
+        border:2px solid #aa0066;
         border-radius:4px;
-        box-shadow:0 4px 24px rgba(0,0,0,0.6);
+        box-shadow:-4px 0 30px #ff000033, 0 4px 30px #aa006644;
         z-index:9999;
         display:flex; flex-direction:column;
         resize:both; overflow:hidden;
@@ -398,26 +398,27 @@ function createFloatingPanel() {
         font-family: 'Noto Serif KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
     ">
         <div id="scouter-drag-handle" style="
-            background:${C.bgDeep};
-            border-bottom:1px solid ${C.border};
+            background:linear-gradient(180deg, #1a0020, #0d0010);
+            border-bottom:2px solid #aa0066;
             padding:8px 12px;
             display:flex; align-items:center; gap:10px;
             cursor:move; flex-shrink:0; user-select:none;
+            box-shadow: 0 4px 20px #ff000022;
         ">
-            <span style="font-size:16px">🔴</span>
+            <span style="font-size:16px;filter:drop-shadow(0 0 6px #ff2200)">🔴</span>
             <div style="flex:1">
-                <div style="font-weight:900;font-size:13px;letter-spacing:2px;font-family:monospace;color:${C.accent}">SCOUTER</div>
-                <div style="font-size:9px;color:${C.textDim};letter-spacing:1px;font-family:monospace">챗씨부인운명상담소</div>
+                <div style="font-weight:900;font-size:13px;letter-spacing:2px;font-family:monospace;background:linear-gradient(90deg,#ff4444,#ff9900,#ff66aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent">SCOUTER</div>
+                <div style="font-size:9px;color:#440033;letter-spacing:1px;font-family:monospace">챗씨부인운명상담소</div>
             </div>
-            <button id="scouter-close" style="background:none;border:1px solid ${C.border};border-radius:3px;color:${C.textDim};cursor:pointer;font-size:12px;padding:2px 7px;font-family:monospace">✕</button>
+            <button id="scouter-close" style="background:none;border:1px solid #440033;border-radius:3px;color:#664433;cursor:pointer;font-size:12px;padding:2px 7px;font-family:monospace">✕</button>
         </div>
-        <div id="cl-tabs" style="display:flex;background:${C.bgDeep};border-bottom:1px solid ${C.border};flex-shrink:0">
+        <div id="cl-tabs" style="display:flex;background:linear-gradient(180deg,#0d0d20,#050510);border-bottom:1px solid #1e1e3a;flex-shrink:0">
             <button class="cl-tab" data-tab="roster">👤 캐릭터</button>
             <button class="cl-tab" data-tab="battle">⚔️ 배틀</button>
             <button class="cl-tab" data-tab="madame">🔮 챗씨부인</button>
             <button class="cl-tab" data-tab="settings">⚙️ 설정</button>
         </div>
-        <div id="cl-madame-subtabs" style="display:none;flex-shrink:0;background:${C.bgDeep};border-bottom:1px solid ${C.border}">
+        <div id="cl-madame-subtabs" style="display:none;flex-shrink:0;background:#0a0015;border-bottom:1px solid #330055">
             <button class="cl-madame-subtab" data-subtab="compat">💘 궁합</button>
             <button class="cl-madame-subtab" data-subtab="sim">🎲 시뮬</button>
             <button class="cl-madame-subtab" data-subtab="saju">🪬 사주</button>
@@ -480,10 +481,14 @@ function toggleFloat() {
 // ═══════════════════════════════════════════
 function switchTab(tab) {
     state.currentTab = tab;
+    const tabColors = { roster: '#ff44aa', battle: '#ff2200', madame: '#cc44ff', settings: '#ffaa00' };
     document.querySelectorAll('#scouter-float .cl-tab').forEach(btn => {
-        btn.style.color = btn.dataset.tab === tab ? C.accent : C.textDim;
-        btn.style.borderBottom = btn.dataset.tab === tab ? `2px solid ${C.accent}` : '2px solid transparent';
-        btn.style.fontWeight = btn.dataset.tab === tab ? '900' : '400';
+        const isActive = btn.dataset.tab === tab;
+        const color = tabColors[btn.dataset.tab] || C.accent;
+        btn.style.color = isActive ? color : C.textDim;
+        btn.style.borderBottom = isActive ? `2px solid ${color}` : '2px solid transparent';
+        btn.style.fontWeight = isActive ? '900' : '400';
+        btn.style.textShadow = isActive ? `0 0 8px ${color}88` : 'none';
     });
     const subtabs = document.getElementById('cl-madame-subtabs');
     if (subtabs) subtabs.style.display = tab === 'madame' ? 'flex' : 'none';
@@ -492,9 +497,11 @@ function switchTab(tab) {
 function switchMadameSubtab(subtab) {
     state.currentMadameSubtab = subtab;
     document.querySelectorAll('#scouter-float .cl-madame-subtab').forEach(btn => {
-        btn.style.color = btn.dataset.subtab === subtab ? C.purple : C.textDim;
-        btn.style.borderBottom = btn.dataset.subtab === subtab ? `2px solid ${C.purple}` : '2px solid transparent';
-        btn.style.fontWeight = btn.dataset.subtab === subtab ? '900' : '400';
+        const isActive = btn.dataset.subtab === subtab;
+        btn.style.color = isActive ? C.purple : C.textDim;
+        btn.style.borderBottom = isActive ? `2px solid ${C.purple}` : '2px solid transparent';
+        btn.style.fontWeight = isActive ? '900' : '400';
+        btn.style.textShadow = isActive ? `0 0 6px ${C.purple}88` : 'none';
     });
     renderActivePane();
 }
@@ -1251,7 +1258,7 @@ function renderMadameSaju(container) {
         ${state.sajuResult ? `
         <div style="margin-top:16px">
             ${renderDivider(`${esc(state.sajuCharName)} 사주풀이`, C.gold)}
-            <div style="font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px">${esc(state.sajuResult)}</div>
+            ${renderSajuResult(state.sajuResult)}
         </div>` : ''}
     </div>`;
 
@@ -1270,8 +1277,49 @@ function renderMadameSaju(container) {
             state.sajuCharName = selectedChar.name;
             hideLoading();
             renderMadameSaju(container);
+            // 아코디언 이벤트 바인딩
+            setTimeout(() => {
+                container.querySelectorAll('.cl-accordion-header').forEach(h =>
+                    h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
+                );
+            }, 50);
         } catch (e) { hideLoading(); toastr.error(`사주풀이 실패: ${e.message}`); }
     });
+}
+
+function renderSajuResult(text) {
+    const sections = [
+        { icon: '🔮', key: '사주팔자',   summary: '년주·월주·일주·시주' },
+        { icon: '🌊', key: '오행 분석',  summary: '목·화·토·금·수 밸런스' },
+        { icon: '⚡', key: '일주 풀이',  summary: '이 사람의 본질과 기질' },
+        { icon: '🌟', key: '용신',       summary: '필요한 기운' },
+        { icon: '💼', key: '직업·재물운', summary: '직업 적성과 재물운' },
+        { icon: '💕', key: '연애·인연운', summary: '사랑을 대하는 방식' },
+        { icon: '🏥', key: '건강',       summary: '주의할 건강 포인트' },
+        { icon: '📅', key: '올해의 운세', summary: '현재 시기의 흐름과 조언' },
+        { icon: '✨', key: '총평',       summary: '챗씨부인의 한마디' },
+    ];
+
+    // 사주팔자 특별 처리 — 점수박스처럼 상단에 표시
+    const sajuMatch = text.match(/【사주팔자】([\s\S]*?)(?=🌊|【오행|$)/u);
+    const sajuBlock = sajuMatch ? sajuMatch[1].trim() : '';
+
+    // 나머지 섹션 파싱
+    const parsed = sections.slice(1).map(s => {
+        const m = text.match(new RegExp(s.icon + '[^\\n]*【' + s.key + '】([\\s\\S]*?)(?=' + ['🌊','⚡','🌟','💼','💕','🏥','📅','✨'].filter(e => e !== s.icon).join('|') + '|$)', 'u'));
+        return { ...s, content: m ? m[1].trim() : '' };
+    });
+
+    return `
+    ${sajuBlock ? `
+    <div style="background:linear-gradient(180deg,#1a0030,#0f0020);border:2px solid #8800cc;border-radius:2px;padding:14px;text-align:center;margin-bottom:12px;box-shadow:0 0 20px #cc44ff22">
+        <div style="font-size:10px;color:#664488;letter-spacing:3px;margin-bottom:8px;font-family:'Noto Serif KR',serif">사주팔자</div>
+        <div style="font-size:13px;color:${C.gold};line-height:2.2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(sajuBlock)}</div>
+    </div>` : ''}
+    ${parsed.map(s => renderAccordion(
+        s.icon, s.key, s.summary,
+        `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(s.content || '—')}</div>`
+    )).join('')}`;
 }
 
 async function runSajuPrompt(char) {
