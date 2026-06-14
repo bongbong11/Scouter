@@ -126,17 +126,29 @@ async function callAI(prompt, systemPrompt) {
 // 프롬프트 실행
 // ═══════════════════════════════════════════
 async function analyzeCharSheet(name, gender, rawSheet) {
+    // 1차 호출 — 기본 정보 + stats
     const slot = getPromptSlot('analyze');
     const userPrompt = fillTpl(slot.user, { name, gender, sheet: rawSheet });
+    let parsed;
     try {
         const raw = await callAI(userPrompt, slot.system);
-        const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-        // 파싱된 성별 우선, 없으면 입력값 사용
+        parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
         if (!parsed.gender) parsed.gender = gender;
-        return parsed;
     } catch {
-        return { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 }, intimacy: { physique: '정보 없음', desire: '정보 없음', style: '정보 없음', preference: '정보 없음' } };
+        parsed = { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 } };
     }
+
+    // 2차 호출 — intimacy 따로
+    try {
+        const iSlot = getPromptSlot('analyzeIntimacy');
+        const iPrompt = fillTpl(iSlot.user, { name, sheet: rawSheet });
+        const iRaw = await callAI(iPrompt, iSlot.system);
+        parsed.intimacy = JSON.parse(iRaw.replace(/```json|```/g, '').trim());
+    } catch {
+        parsed.intimacy = { physique: '', desire: '', style: '', preference: '' };
+    }
+
+    return parsed;
 }
 
 async function runBattlePrompt(fighters) {
@@ -710,6 +722,7 @@ function renderCharDetail(container) {
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
                 <button id="cl-gender-toggle" style="flex:1;background:${gc}22;border:1px solid ${gc}66;border-radius:2px;padding:6px;cursor:pointer;color:${gc};font-size:11px">${char.gender === 'female' ? '♂ 남성으로 변경' : '♀ 여성으로 변경'}</button>
+                <button id="cl-detail-reanalyze" style="padding:6px 12px;background:none;border:1px solid ${C.accent}66;border-radius:2px;cursor:pointer;color:${C.accent};font-size:11px">🔄 재분석</button>
                 <button id="cl-detail-delete" style="padding:6px 12px;background:none;border:1px solid ${C.border};border-radius:2px;cursor:pointer;color:${C.textDim};font-size:11px">🗑 삭제</button>
             </div>
         </div>
@@ -725,6 +738,25 @@ function renderCharDetail(container) {
         container.querySelector('#cl-gender-toggle')?.addEventListener('click', () => {
             char.gender = char.gender === 'female' ? 'male' : 'female';
             save(); doRender(); toastr.success(`성별 → ${char.gender === 'female' ? '여성' : '남성'}`);
+        });
+        container.querySelector('#cl-detail-reanalyze')?.addEventListener('click', async () => {
+            if (!char.parsed?.raw) { toastr.warning('원본 시트가 없습니다'); return; }
+            toastr.info(`${char.name} 재분석 중...`);
+            try {
+                const newParsed = await analyzeCharSheet(char.name, char.gender, char.parsed.raw);
+                const s = getSettings();
+                const target = s.roster.find(c => c.id === char.id);
+                if (target) {
+                    target.parsed = { ...newParsed, raw: char.parsed.raw };
+                    target.stats = newParsed.stats;
+                    target.gender = newParsed.gender || char.gender;
+                    save();
+                    // char 참조 업데이트
+                    Object.assign(char, target);
+                    doRender();
+                    toastr.success(`${char.name} 재분석 완료!`);
+                }
+            } catch (e) { toastr.error(`재분석 실패: ${e.message}`); }
         });
         container.querySelector('#cl-detail-delete')?.addEventListener('click', async () => {
             const { Popup, POPUP_RESULT } = SillyTavern.getContext();
