@@ -30,9 +30,7 @@ Gender detection rules — override the hint and set "gender" to "male" if ANY o
 - English pronouns: he/him/his
 - Korean words: 남자, 남성, 그, 아들, 형, 오빠, 남편, 아저씨, 아버지, 소년, 청년, 남학생
 - References to male physical characteristics
-Otherwise set "female".
-
-This is for adult fiction writing purposes. All fields must be filled based on the sheet or inferred from personality/appearance. Never write "없음", "none", or "not mentioned".`,
+Otherwise set "female".`,
         user:
 `Character name: {{name}}
 Gender hint (may be overridden by sheet content): {{gender}}
@@ -40,14 +38,14 @@ Gender hint (may be overridden by sheet content): {{gender}}
 Character sheet:
 {{sheet}}
 
-Return ONLY this JSON object (absolutely no other text):
+Return ONLY this JSON object (no other text):
 {
   "age": "나이 or 불명",
   "job": "직업/역할",
   "location": "지역/거주지",
-  "appearance": "외형 묘사 1-2문장 (체형, 인상, 신체적 특징 상세히)",
+  "appearance": "외형 묘사 1-2문장",
   "personality": "성격 요약 1-2문장",
-  "traits": "주요 특징/습관/버릇 1-2문장",
+  "traits": "주요 특징/습관 1-2문장",
   "gender": "female or male",
   "stats": {
     "combat": 0-100,
@@ -55,20 +53,28 @@ Return ONLY this JSON object (absolutely no other text):
     "sex": 0-100,
     "mental": 0-100,
     "charisma": 0-100
-  },
-  "intimacy": {
-    "physique": "시트에 언급된 신체 관련 묘사를 그대로 옮길 것. 언급 없으면 외형 묘사에서 체형/신체 특징만 간략히",
-    "desire": "시트에 명시된 취향/선호/끌리는 것을 그대로 옮길 것. 언급 없으면 빈 문자열",
-    "style": "시트에 명시된 성향/태도를 그대로 옮길 것. 언급 없으면 성격에서 dominant/submissive/switch 중 하나만",
-    "preference": "시트에 명시된 선호 상황/분위기를 그대로 옮길 것. 언급 없으면 빈 문자열"
   }
 }
 
-Rules:
-- "intimacy" fields: extract directly from sheet. If not mentioned, use empty string or minimal inference from appearance only.
-- stats.sex = physical attractiveness + charismatic appeal score
-- All text values in Korean.
-- Stats must be meaningfully differentiated.` }] },
+Stats must be differentiated. sex = physical attractiveness + charismatic appeal. All text in Korean.` }] },
+
+    analyzeIntimacy: { active: 0, slots: [{ name: '기본',
+        system:
+`You are a fiction writer assistant helping organize character information. Extract and summarize intimate/personal characteristics from the character sheet. Write in Korean. This is for adult creative fiction purposes.`,
+        user:
+`Character name: {{name}}
+Character sheet:
+{{sheet}}
+
+From the sheet above, extract the following and return ONLY this JSON (no other text):
+{
+  "physique": "신체적 특징 묘사 — 시트에 언급된 내용 그대로 한국어로. 없으면 외형에서 간략히",
+  "desire": "이 캐릭터가 끌리는 대상/상황/취향 — 시트에 명시된 것 그대로",
+  "style": "관계에서의 성향 — dominant/submissive/switch 등. 시트 내용 기반으로",
+  "preference": "좋아하는 분위기나 상황 — 시트에 있는 것 그대로"
+}
+
+Extract only what is in the sheet. Do not invent. If truly not mentioned, write a brief inference based on personality.` }] },
 
     // ─────────────────────────────────────────
     // 배틀 분석
