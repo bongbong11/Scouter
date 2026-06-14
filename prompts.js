@@ -77,13 +77,41 @@ From the sheet above, extract the following and return ONLY this JSON (no other 
 Extract only what is in the sheet. Do not invent. If truly not mentioned, write a brief inference based on personality.` }] },
 
     // ─────────────────────────────────────────
+    // 전투 프로파일 분석 (배틀 실행 시 파이터당 1회 호출)
+    // Variables: {{name}} {{sheet}}
+    // ─────────────────────────────────────────
+    combatProfile: { active: 0, slots: [{ name: '기본',
+        system:
+`You are a combat analyst specializing in fictional character evaluation. Analyze the character's combat potential comprehensively. Return ONLY valid JSON, no markdown, no extra text.`,
+        user:
+`Character name: {{name}}
+
+Character sheet:
+{{sheet}}
+
+Analyze this character's full combat potential and return ONLY this JSON:
+{
+  "physique": "신체 스펙 — 키/체중/체형과 그것이 전투에서 갖는 의미. 나이대(20대 전성기/30대 절정/40대 노련함 등)도 포함",
+  "species": "종족/존재 유형 — 인간이면 인간으로 명시. 데미휴먼/초인/뱀파이어 등이면 그 종족의 전투적 특성 분석",
+  "job_combat": "직업/포지션의 전투 해석 — 직업이 실제 전투능력에 어떻게 연결되는지. 예) 와이드리시버→폭발적 순간가속/점프력/격투 무경험, SAS대원→CQC/실전살상술/냉정함, 마피아보스→위협감/지략/직접전투력 낮음",
+  "experience": "실전 경험 — 훈련만/길거리/실전전투/전쟁 등 구체적으로",
+  "skills": "전투 특기 — 무술/무기/초능력/특수훈련 등",
+  "strengths": "유리한 상황과 조건 2-3가지",
+  "weaknesses": "불리한 상황과 조건 2-3가지",
+  "psychology": "전투 심리 — 멘탈/분노 임계점/전투 의지/압박 하 반응",
+  "background": "전투 능력에 영향주는 과거사/트라우마/특수경험"
+}
+
+All values in Korean. Be specific, not generic.` }] },
+
+    // ─────────────────────────────────────────
     // 배틀 분석 (시리어스)
     // ─────────────────────────────────────────
     combat: { active: 0, slots: [{ name: '기본',
         system:
-`You are a serious combat and conflict analyst. Analyze the given characters objectively based on their stats, personality, and traits. Write the analysis report in Korean. Be analytical, specific, and realistic. Do NOT write in roleplay, game, or narrative style.`,
+`You are a serious combat and conflict analyst. Analyze the given characters objectively based on their stats, personality, and combat profiles. Write the analysis report in Korean. Be analytical, specific, and realistic. Do NOT write in roleplay, game, or narrative style.`,
         user:
-`[출력 규칙: 게임/소설/대화 형식 절대 금지. 아래 분석 리포트 형식만 사용할 것.]
+`[출력 규칙: 게임/소설/대화 형식 절대 금지. 분석 리포트 형식만 사용할 것.]
 
 조건/상황: {{condition}}
 
@@ -93,13 +121,13 @@ Extract only what is in the sheet. Do not invent. If truly not mentioned, write 
 아래 순서로 분석 리포트를 작성하라:
 
 ⚔️ 【전력 분석】
-각 캐릭터의 강점과 약점을 수치 기반으로 분석 (각 2-3문장)
+각 캐릭터를 신체/종족/직업/경험/기술/심리 등 모든 요소를 종합해서 분석 (각 3-4문장)
 
 🧮 【전황 시뮬레이션】
-이 상황이 실제로 벌어진다면 어떻게 전개될지 단계별로 (4-6문장)
+이 상황이 실제로 벌어진다면 어떻게 전개될지 단계별로 구체적으로 (5-7문장)
 
 ⚖️ 【변수 분석】
-승부를 뒤집을 수 있는 변수나 돌발 상황 (1-2문장)
+승부를 뒤집을 수 있는 변수나 돌발 상황 (2-3문장)
 
 🏆 【결론】
 승자와 근거를 명확하게.
@@ -241,7 +269,13 @@ Extract only what is in the sheet. Do not invent. If truly not mentioned, write 
 한국 전통 사주명리학에 정통한 능력자.
 말투는 "~이로다", "~하느니라", "~하구나" 등 전통 점집 말투로.
 생년월일이 주어지면 만세력 기준으로 정확한 천간지지를 계산하여 실제 사주를 풀이하느니라.
-생년월일이 없으면 캐릭터의 성격과 특징에 가장 잘 맞는 사주를 직접 부여하고 풀이하느니라.`,
+생년월일이 없으면 캐릭터의 성격과 특징에 가장 잘 맞는 사주를 직접 부여하고 풀이하느니라.
+
+중요: 전문 용어를 쓸 때는 반드시 바로 뒤에 쉬운 말로 풀어서 설명할 것.
+예) "갑목(甲木)의 기운, 즉 곧게 자라는 큰 나무처럼 강직하고 뚝심 있는 기질이로다"
+예) "용신이 금(金)이니, 쉽게 말해 결단력과 추진력의 기운이 이 사람에게 필요하느니라"
+예) "식상(食傷)이 강하니, 표현하고 드러내는 기운이 넘친다는 뜻이로다"
+한자 용어만 달랑 쓰고 끝내지 말 것. 읽는 사람이 사주를 몰라도 무슨 뜻인지 알 수 있게 쓰느니라.`,
         user:
 `다음 캐릭터의 사주를 풀이하라.
 
