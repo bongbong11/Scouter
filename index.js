@@ -42,7 +42,7 @@ import { PROMPT_META, DEFAULT_PROMPTS } from './prompts.js';
 const defaultSettings = {
     roster: [], battleList: [], madameList: [], sajuList: [],
     allowSameGender: false, selectedProfileName: null,
-    devUnlocked: false, prompts: null,
+    devUnlocked: false, prompts: null, maxTokens: 4000,
 };
 
 // ═══════════════════════════════════════════
@@ -121,7 +121,7 @@ async function callAI(prompt, systemPrompt) {
                 ? [{ role: 'user', content: `${systemPrompt}\n\n${prompt}` }]
                 : [{ role: 'user', content: prompt }];
             const response = await ctx.ConnectionManagerRequestService.sendRequest(
-                profile.id, messages, 4000,
+                profile.id, messages, settings.maxTokens || 4000,
                 { stream: false, extractData: true, includePreset: true, includeInstruct: false }
             );
             let raw = '';
@@ -1475,6 +1475,17 @@ function renderSettings(container) {
             </div>
         </div>
 
+        ${renderDivider('AI 설정', C.accent)}
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+                <div style="flex:1">
+                    <div style="font-size:12px;color:${C.text};margin-bottom:4px">최대 토큰 수</div>
+                    <div style="font-size:10px;color:${C.textDim}">사주/궁합 등 긴 답변이 잘리면 늘려보세요</div>
+                </div>
+                <input id="cl-max-tokens" type="number" min="1000" max="32000" step="1000" value="${settings.maxTokens || 4000}" style="width:80px;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:6px 8px;color:${C.text};font-size:13px;font-family:monospace;outline:none;text-align:center">
+            </div>
+        </div>
+
         ${renderDivider('저장 현황', C.accent)}
         <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:14px;margin-bottom:14px">
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
@@ -1490,6 +1501,14 @@ function renderSettings(container) {
             Scouter v2.0 · 챗씨부인운명상담소
         </div>
     </div>`;
+
+    container.querySelector('#cl-max-tokens')?.addEventListener('change', e => {
+        const val = parseInt(e.target.value);
+        if (val >= 1000 && val <= 32000) {
+            const s = getSettings(); s.maxTokens = val; save();
+            toastr.success(`최대 토큰 ${val}으로 설정됨`);
+        }
+    });
 
     // 전체 삭제
     container.querySelector('#cl-clear-all')?.addEventListener('click', async () => {
