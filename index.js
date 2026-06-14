@@ -40,7 +40,7 @@ import { PROMPT_META, DEFAULT_PROMPTS } from './prompts.js';
 // 기본 설정
 // ═══════════════════════════════════════════
 const defaultSettings = {
-    roster: [], battleList: [], madameList: [],
+    roster: [], battleList: [], madameList: [], sajuList: [],
     allowSameGender: false, selectedProfileName: null,
     devUnlocked: false, prompts: null,
 };
@@ -61,9 +61,9 @@ let state = {
     madameSetup: { selected: [] },
     simSetup: { selected: [], situation: '' },
     simResult: null,
+    sajuView: 'list',   // 'list' | 'setup' | 'result'
     sajuCharId: null,
-    sajuResult: null,
-    sajuCharName: null,
+    activeSajuId: null,
     isPanelOpen: false,
 };
 
@@ -407,7 +407,7 @@ function createFloatingPanel() {
         ">
             <span style="font-size:16px;filter:drop-shadow(0 0 6px #ff2200)">🔴</span>
             <div style="flex:1">
-                <div style="font-weight:900;font-size:13px;letter-spacing:2px;font-family:monospace;background:linear-gradient(90deg,#ff4444,#ff9900,#ff66aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent">SCOUTER</div>
+                <div style="font-weight:900;font-size:13px;letter-spacing:2px;font-family:monospace" class="cl-shimmer">SCOUTER</div>
                 <div style="font-size:9px;color:#440033;letter-spacing:1px;font-family:monospace">챗씨부인운명상담소</div>
             </div>
             <button id="scouter-close" style="background:none;border:1px solid #440033;border-radius:3px;color:#664433;cursor:pointer;font-size:12px;padding:2px 7px;font-family:monospace">✕</button>
@@ -1077,11 +1077,11 @@ function renderMadameResult(container) {
         ${compat.triangle?`<div style="margin-top:6px;font-size:11px;color:${C.purple}">🔺 삼각관계의 기운이 감돌도다</div>`:compat.poly?`<div style="margin-top:6px;font-size:11px;color:${C.purple}">💫 다각의 인연이로다</div>`:''}
     </div>
     <div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:18px;text-align:center;margin-bottom:12px">
-            <div style="font-size:10px;color:${C.textDim};letter-spacing:2px;margin-bottom:8px">이 인연의 점괘는...</div>
-            <div style="font-size:54px;font-weight:900;color:${scoreColor};font-family:monospace;line-height:1">${compat.score}</div>
+        <div style="background:linear-gradient(180deg,#1a0030,#0f0020);border:2px solid #8800cc;border-radius:2px;padding:18px;text-align:center;margin-bottom:12px" class="cl-pulse-purple">
+            <div style="font-size:10px;color:#664488;letter-spacing:2px;margin-bottom:8px;font-family:'Noto Serif KR',serif">이 인연의 점괘는...</div>
+            <div style="font-size:54px;font-weight:900;color:${scoreColor};font-family:monospace;line-height:1;filter:drop-shadow(0 0 12px ${scoreColor}88)">${compat.score}</div>
             <div style="font-size:9px;color:${C.textDim};margin-top:4px">/ 100점</div>
-            <div style="font-size:13px;font-weight:700;color:${C.textBright};margin-top:8px">「${esc(compat.type)}」</div>
+            <div style="font-size:13px;font-weight:700;color:${C.textBright};margin-top:8px;font-family:'Noto Serif KR',serif">「${esc(compat.type)}」</div>
         </div>
         ${renderAccordion('📊','항목별 궁합 점수','각 기운의 수치를 보여드리리다', scoreItems || `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(scoreSection)}</div>`)}
         ${renderAccordion('⚡','관계의 기운','쫓는 자와 도망치는 자의 인연...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(dynamicSection)}</div>`)}
@@ -1216,159 +1216,178 @@ function renderMadameSim(container) {
 // ═══════════════════════════════════════════
 function renderMadameSaju(container) {
     const settings = getSettings();
+    if (state.sajuView === 'result' && state.activeSajuId) { renderSajuResult2(container); return; }
+    if (state.sajuView === 'setup') { renderSajuSetup(container); return; }
+
+    // 목록
+    const list = (settings.sajuList || []).map(s => `
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.gold};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-saju-rec" data-id="${s.id}">
+            <div style="flex:1">
+                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(s.charName)}</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(s.dayPillar || '—')} · ${esc(s.createdAt || '')}</div>
+            </div>
+            ${s.hasBirth ? `<span style="font-size:9px;padding:2px 6px;background:#ffaa0022;border:1px solid #ffaa0066;color:#ffaa00;border-radius:2px;white-space:nowrap">실제사주</span>` : `<span style="font-size:9px;padding:2px 6px;background:${C.purple}22;border:1px solid ${C.purple}44;color:${C.purple};border-radius:2px;white-space:nowrap">창작사주</span>`}
+            <button class="cl-saju-del" data-id="${s.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
+        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">풀이된 사주가 없구나...</div>`;
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid ${C.gold}66;border-radius:2px;padding:12px;text-align:center;margin-bottom:14px;animation:cl-pulse-gold 2s ease-in-out infinite">
+            <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-bottom:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
+            <div style="font-size:14px;font-weight:700;color:${C.gold};text-shadow:0 0 10px ${C.gold}88">챗씨부인 사주풀이</div>
+            <div style="font-size:10px;color:#886633;margin-top:3px;font-family:'Noto Serif KR',serif">캐릭터의 운명을 사주로 풀어드립니다</div>
+            <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-top:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
+        </div>
+        ${renderDivider('사주 기록', C.gold)}
+        ${list}
+        <button id="cl-saju-new" style="width:100%;background:${C.gold}22;border:1px solid ${C.gold}88;border-radius:2px;padding:9px;cursor:pointer;color:${C.gold};font-size:12px;font-weight:700">🪬 사주 풀기</button>
+    </div>`;
+
+    container.querySelectorAll('.cl-saju-rec').forEach(rec => rec.addEventListener('click', () => {
+        state.activeSajuId = rec.dataset.id; state.sajuView = 'result'; renderActivePane();
+    }));
+    container.querySelectorAll('.cl-saju-del').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const s = getSettings(); s.sajuList = (s.sajuList || []).filter(x => x.id !== btn.dataset.id); save();
+        renderMadameSaju(container);
+    }));
+    container.querySelector('#cl-saju-new')?.addEventListener('click', () => {
+        state.sajuCharId = null; state.sajuView = 'setup'; renderActivePane();
+    });
+}
+
+function renderSajuSetup(container) {
+    const settings = getSettings();
     const roster = settings.roster;
     const selectedId = state.sajuCharId || null;
     const selectedChar = roster.find(c => c.id === selectedId) || null;
 
-    const charList = GENDER_SECTIONS.map(g => {
+    const charRows = GENDER_SECTIONS.map(g => {
         const group = roster.filter(c => c.gender === g.id);
         if (!group.length) return '';
         return `<div style="margin-bottom:10px">
             <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
             ${group.map(char => {
                 const isSel = char.id === selectedId;
-                return `<div class="cl-saju-sel" data-id="${char.id}" style="background:${isSel ? C.gold+'22' : C.bgCard};border:2px solid ${isSel ? C.gold : C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
+                return `<div class="cl-saju-sel" data-id="${char.id}" style="background:${isSel?C.gold+'22':C.bgCard};border:2px solid ${isSel?C.gold:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
                     ${renderAvatar(char.name, char.gender, 30)}
-                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${isSel ? C.textBright : C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.age||'—')}세 · ${esc(char.parsed?.job||'—')}</div></div>
-                    ${isSel ? `<span style="color:${C.gold}">✦</span>` : ''}
+                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${isSel?C.textBright:C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.age||'—')}세 · ${esc(char.parsed?.job||'—')}</div></div>
+                    ${isSel?`<span style="color:${C.gold};text-shadow:0 0 8px ${C.gold}">✦</span>`:''}
                 </div>`;
             }).join('')}
         </div>`;
     }).join('');
 
     container.innerHTML = `<div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:12px;text-align:center;margin-bottom:14px">
-            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-bottom:4px">◆◆◆◆◆</div>
-            <div style="font-size:14px;font-weight:700;color:${C.gold}">챗씨부인 사주풀이</div>
-            <div style="font-size:10px;color:${C.textDim};margin-top:3px">캐릭터의 운명을 사주로 풀어드립니다</div>
-            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-top:4px">◆◆◆◆◆</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <button id="cl-saju-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
+            <span style="font-size:13px;font-weight:700;color:${C.gold}">사주 풀 캐릭터 선택</span>
         </div>
-
-        ${renderDivider('캐릭터 선택', C.gold)}
-        ${roster.length ? charList : `<div style="color:${C.textDim};font-size:12px;padding:10px 0">등록된 캐릭터 없음</div>`}
-
-        ${selectedChar ? `
-        <button id="cl-saju-go" style="width:100%;background:${C.gold}33;border:1px solid ${C.gold}88;border-radius:2px;padding:9px;cursor:pointer;color:${C.gold};font-size:12px;font-weight:700;margin-top:4px">
-            🪬 ${esc(selectedChar.name)}의 사주 풀기
-        </button>` : `
-        <button disabled style="width:100%;background:#2a1e12;border:1px solid ${C.border};border-radius:2px;padding:9px;cursor:not-allowed;color:${C.textDim};font-size:12px">
-            캐릭터를 선택하세요
-        </button>`}
-
-        ${state.sajuResult ? `
-        <div style="margin-top:16px">
-            ${renderDivider(`${esc(state.sajuCharName)} 사주풀이`, C.gold)}
-            ${renderSajuResult(state.sajuResult)}
-        </div>` : ''}
+        ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:12px 0">등록된 캐릭터 없음</div>`}
+        <button id="cl-saju-go" ${!selectedChar?'disabled':''} style="width:100%;background:${selectedChar?C.gold+'22':'#1a1000'};border:1px solid ${selectedChar?C.gold+'88':C.border};border-radius:2px;padding:9px;cursor:${selectedChar?'pointer':'not-allowed'};color:${selectedChar?C.gold:C.textDim};font-size:12px;font-weight:700">
+            ${selectedChar?`🪬 ${esc(selectedChar.name)}의 사주 풀기`:'캐릭터를 선택하세요'}
+        </button>
     </div>`;
 
+    container.querySelector('#cl-saju-back')?.addEventListener('click', () => { state.sajuView='list'; renderActivePane(); });
     container.querySelectorAll('.cl-saju-sel').forEach(el => el.addEventListener('click', () => {
-        state.sajuCharId = el.dataset.id;
-        state.sajuResult = null;
-        renderMadameSaju(container);
+        state.sajuCharId = el.dataset.id; renderSajuSetup(container);
     }));
-
     container.querySelector('#cl-saju-go')?.addEventListener('click', async () => {
         if (!selectedChar) return;
+        // 생년월일 감지 여부 미리 표시
+        const raw = selectedChar.parsed?.raw || '';
+        const hasBirth = /(?:생년월일|birth|born|birthday|dob)[^\d]*\d{4}|\d{4}[.\-\/년]\s*\d{1,2}[.\-\/월]\s*\d{1,2}/i.test(raw);
+        toastr.info(hasBirth ? '생년월일 감지 — 실제 사주 계산 중...' : '생년월일 없음 — 챗씨부인이 사주를 지어드립니다...');
         showLoading(null, 'compat');
         try {
-            const result = await runSajuPrompt(selectedChar);
-            state.sajuResult = result;
-            state.sajuCharName = selectedChar.name;
-            hideLoading();
-            renderMadameSaju(container);
-            // 아코디언 이벤트 바인딩
-            setTimeout(() => {
-                container.querySelectorAll('.cl-accordion-header').forEach(h =>
-                    h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
-                );
-            }, 50);
+            const resultText = await runSajuPrompt(selectedChar);
+            const dayM = resultText.match(/일주[：:]\s*(.+)/);
+            const dayPillar = dayM ? dayM[1].trim() : '';
+            const session = {
+                id: 'saju_' + Date.now(),
+                charId: selectedChar.id,
+                charName: selectedChar.name,
+                dayPillar,
+                hasBirth,
+                resultText,
+                createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.'),
+            };
+            const s = getSettings();
+            if (!s.sajuList) s.sajuList = [];
+            s.sajuList.unshift(session); save();
+            state.activeSajuId = session.id; state.sajuView = 'result';
+            hideLoading(); renderActivePane();
         } catch (e) { hideLoading(); toastr.error(`사주풀이 실패: ${e.message}`); }
     });
 }
 
-function renderSajuResult(text) {
+function renderSajuResult2(container) {
+    const settings = getSettings();
+    const session = (settings.sajuList || []).find(s => s.id === state.activeSajuId);
+    if (!session) { state.sajuView='list'; renderActivePane(); return; }
+    const char = settings.roster.find(c => c.id === session.charId);
+
+    container.innerHTML = `
+    <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border-bottom:2px solid ${C.gold}66;padding:14px;text-align:center;position:relative">
+        <button id="cl-sr-back" style="position:absolute;top:14px;left:14px;background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px">◀ 목록</button>
+        <div style="font-size:10px;color:#664422;letter-spacing:2px;margin-bottom:6px;font-family:'Noto Serif KR',serif">✦ 사주를 풀어드리리다 ✦</div>
+        ${char ? renderAvatar(char.name, char.gender, 44) : ''}
+        <div style="font-size:15px;font-weight:700;color:${C.gold};margin-top:8px;text-shadow:0 0 10px ${C.gold}88">${esc(session.charName)}</div>
+        ${session.dayPillar ? `<div style="font-size:11px;color:#886633;margin-top:4px;font-family:'Noto Serif KR',serif">일주: ${esc(session.dayPillar)}</div>` : ''}
+    </div>
+    <div style="padding:14px">
+        ${renderSajuAccordions(session.resultText)}
+    </div>`;
+
+    container.querySelector('#cl-sr-back')?.addEventListener('click', () => { state.sajuView='list'; renderActivePane(); });
+    container.querySelectorAll('.cl-accordion-header').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('open')));
+}
+
+function renderSajuAccordions(text) {
     const sections = [
-        { icon: '🔮', key: '사주팔자',   summary: '년주·월주·일주·시주' },
-        { icon: '🌊', key: '오행 분석',  summary: '목·화·토·금·수 밸런스' },
-        { icon: '⚡', key: '일주 풀이',  summary: '이 사람의 본질과 기질' },
-        { icon: '🌟', key: '용신',       summary: '필요한 기운' },
+        { icon: '🔮', key: '사주팔자',    summary: '년주·월주·일주·시주' },
+        { icon: '🌊', key: '오행 분석',   summary: '목·화·토·금·수 밸런스' },
+        { icon: '⚡', key: '일주 풀이',   summary: '이 사람의 본질과 기질' },
+        { icon: '🌟', key: '용신',        summary: '필요한 기운' },
         { icon: '💼', key: '직업·재물운', summary: '직업 적성과 재물운' },
         { icon: '💕', key: '연애·인연운', summary: '사랑을 대하는 방식' },
-        { icon: '🏥', key: '건강',       summary: '주의할 건강 포인트' },
+        { icon: '🏥', key: '건강',        summary: '주의할 건강 포인트' },
         { icon: '📅', key: '올해의 운세', summary: '현재 시기의 흐름과 조언' },
-        { icon: '✨', key: '총평',       summary: '챗씨부인의 한마디' },
+        { icon: '✨', key: '총평',        summary: '챗씨부인의 한마디' },
     ];
-
-    // 사주팔자 특별 처리 — 점수박스처럼 상단에 표시
-    const sajuMatch = text.match(/【사주팔자】([\s\S]*?)(?=🌊|【오행|$)/u);
-    const sajuBlock = sajuMatch ? sajuMatch[1].trim() : '';
-
-    // 나머지 섹션 파싱
-    const parsed = sections.slice(1).map(s => {
-        const m = text.match(new RegExp(s.icon + '[^\\n]*【' + s.key + '】([\\s\\S]*?)(?=' + ['🌊','⚡','🌟','💼','💕','🏥','📅','✨'].filter(e => e !== s.icon).join('|') + '|$)', 'u'));
-        return { ...s, content: m ? m[1].trim() : '' };
-    });
-
-    return `
-    ${sajuBlock ? `
-    <div style="background:linear-gradient(180deg,#1a0030,#0f0020);border:2px solid #8800cc;border-radius:2px;padding:14px;text-align:center;margin-bottom:12px;box-shadow:0 0 20px #cc44ff22">
-        <div style="font-size:10px;color:#664488;letter-spacing:3px;margin-bottom:8px;font-family:'Noto Serif KR',serif">사주팔자</div>
-        <div style="font-size:13px;color:${C.gold};line-height:2.2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(sajuBlock)}</div>
-    </div>` : ''}
-    ${parsed.map(s => renderAccordion(
-        s.icon, s.key, s.summary,
-        `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(s.content || '—')}</div>`
-    )).join('')}`;
+    const allIcons = sections.map(s => s.icon);
+    return sections.map(s => {
+        const others = allIcons.filter(e => e !== s.icon).join('|');
+        const m = text.match(new RegExp(s.icon + '[^\\n]*【' + s.key + '】([\\s\\S]*?)(?=' + others + '|$)', 'u'));
+        const content = m ? m[1].trim() : '';
+        return renderAccordion(
+            s.icon, s.key, s.summary,
+            `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(content || '—')}</div>`
+        );
+    }).join('');
 }
 
 async function runSajuPrompt(char) {
-    const system = `당신은 챗씨부인이라는 신묘한 점쟁이입니다. 한국 전통 사주명리학에 정통한 능력자. 말투는 "~이로다", "~하느니라", "~하구나" 등 전통 점집 말투로. 캐릭터의 성격/직업/나이/특징을 바탕으로 그에 걸맞은 사주팔자를 지어내고 풀이하느니라.`;
-    const prompt = `다음 캐릭터의 사주를 풀이하라. 실제 생년월일이 없으니 캐릭터의 성격과 특징에 맞는 사주를 챗씨부인이 직접 부여하고 풀이할 것.
+    const raw = char.parsed?.raw || '';
+    const birthMatch = raw.match(/(?:생년월일|birth|born|birthday|dob)[^\d]*(\d{4})[.\-\/\s년]?\s*(\d{1,2})[.\-\/\s월]?\s*(\d{1,2})/i)
+        || raw.match(/(\d{4})[.\-\/년]\s*(\d{1,2})[.\-\/월]\s*(\d{1,2})/);
+    const birthTime = raw.match(/(?:생시|birth\s*time|born\s*at|시간)[^\d]*(\d{1,2})[:시]/i);
+    const hasBirth = !!birthMatch;
+    const birthInfo = hasBirth
+        ? `실제 생년월일: ${birthMatch[1]}년 ${birthMatch[2]}월 ${birthMatch[3]}일${birthTime ? ` ${birthTime[1]}시` : ' (생시 미상)'}\n→ 이 생년월일을 기반으로 만세력 기준 정확한 천간지지를 계산하여 풀이하라.`
+        : '생년월일 정보 없음 → 캐릭터의 성격/특징에 가장 잘 맞는 사주팔자를 챗씨부인이 직접 부여하고 풀이하라.';
 
-캐릭터 정보:
-이름: ${char.name}
-나이: ${char.parsed?.age || '불명'}
-직업: ${char.parsed?.job || '불명'}
-성격: ${char.parsed?.personality || ''}
-특징: ${char.parsed?.traits || ''}
-외형: ${char.parsed?.appearance || ''}
-
-아래 항목을 순서대로 풀이하라:
-
-🔮 【사주팔자】
-년주: OO년 (천간지지)
-월주: OO월
-일주: OO일 (이 사람의 본질)
-시주: OO시
-(캐릭터 성격에 맞게 천간지지 부여)
-
-🌊 【오행 분석】
-목(木) / 화(火) / 토(土) / 금(金) / 수(水) 비율과 특징
-강한 기운과 부족한 기운
-
-⚡ 【일주 풀이】
-이 사람의 본질과 기질 (3-4문장)
-
-🌟 【용신】
-이 사람에게 필요한 기운과 그 이유
-
-💼 【직업·재물운】
-타고난 직업 적성과 재물을 대하는 방식 (3-4문장)
-
-💕 【연애·인연운】
-사랑을 대하는 방식, 어떤 인연과 잘 맞는지 (3-4문장)
-
-🏥 【건강】
-주의해야 할 건강 포인트
-
-📅 【올해의 운세】
-현재 시기의 흐름과 조언 (3-4문장)
-
-✨ 【총평】
-챗씨부인의 한마디 (점쟁이 말투로 2-3문장)`;
-
-    return await callAI(prompt, system);
+    const slot = getPromptSlot('saju');
+    const prompt = fillTpl(slot.user, {
+        name: char.name,
+        age: char.parsed?.age || '불명',
+        job: char.parsed?.job || '불명',
+        personality: char.parsed?.personality || '',
+        traits: char.parsed?.traits || '',
+        appearance: char.parsed?.appearance || '',
+        birthInfo,
+    });
+    return await callAI(prompt, slot.system);
 }
 
 // 설정 탭
@@ -1391,70 +1410,13 @@ function renderSettings(container) {
 
         ${renderDivider('저장 현황', C.accent)}
         <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:14px;margin-bottom:14px">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
-                <div><div style="font-size:26px;font-weight:900;color:${C.female};font-family:monospace">${settings.roster.length}</div><div style="font-size:9px;color:${C.textDim}">캐릭터</div></div>
-                <div><div style="font-size:26px;font-weight:900;color:${C.accent};font-family:monospace">${settings.battleList.length}</div><div style="font-size:9px;color:${C.textDim}">배틀</div></div>
-                <div><div style="font-size:26px;font-weight:900;color:${C.purple};font-family:monospace">${settings.madameList.length}</div><div style="font-size:9px;color:${C.textDim}">궁합</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
+                <div><div style="font-size:22px;font-weight:900;color:${C.female};font-family:monospace;text-shadow:0 0 8px ${C.female}88">${settings.roster.length}</div><div style="font-size:9px;color:${C.textDim}">캐릭터</div></div>
+                <div><div style="font-size:22px;font-weight:900;color:#ff2200;font-family:monospace;text-shadow:0 0 8px #ff220088">${settings.battleList.length}</div><div style="font-size:9px;color:${C.textDim}">배틀</div></div>
+                <div><div style="font-size:22px;font-weight:900;color:${C.purple};font-family:monospace;text-shadow:0 0 8px ${C.purple}88">${settings.madameList.length}</div><div style="font-size:9px;color:${C.textDim}">궁합</div></div>
+                <div><div style="font-size:22px;font-weight:900;color:${C.gold};font-family:monospace;text-shadow:0 0 8px ${C.gold}88">${(settings.sajuList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">사주</div></div>
             </div>
-            <button id="cl-clear-all" style="width:100%;background:none;border:1px solid #804040;border-radius:2px;padding:8px;cursor:pointer;color:#a06060;font-size:11px">🗑 전체 데이터 삭제</button>
-        </div>
-
-        ${renderDivider('개발자 모드', C.accent)}
-        <div style="margin-bottom:14px">
-            ${!devUnlocked ? `
-            <div style="display:flex;gap:8px;align-items:center">
-                <button id="cl-dev-btn" title="개발자 모드" style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:8px 12px;cursor:pointer;font-size:16px">🔒</button>
-                <input id="cl-dev-pw" type="password" placeholder="비밀번호" style="flex:1;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:7px 10px;color:${C.text};font-size:12px;outline:none">
-                <button id="cl-dev-unlock" style="background:${C.accent};border:none;border-radius:2px;padding:7px 12px;cursor:pointer;color:#fff;font-size:11px;font-weight:700">잠금해제</button>
-            </div>` : `
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-                <span style="font-size:16px">🔓</span>
-                <span style="font-size:11px;color:${C.accent};font-weight:700">개발자 모드 활성화</span>
-                <button id="cl-dev-lock" style="margin-left:auto;background:none;border:1px solid ${C.border};border-radius:2px;padding:4px 10px;cursor:pointer;color:${C.textDim};font-size:10px">잠금</button>
-            </div>
-            <div id="cl-prompt-editor">
-                ${Object.entries(PROMPT_META).map(([key, meta]) => {
-                    const def = DEFAULT_PROMPTS[key];
-                    const p = settings.prompts?.[key] || def;
-                    const activeIdx = p.active ?? 0;
-                    const slot = p.slots?.[activeIdx] || def.slots[0];
-                    return `<div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;margin-bottom:8px;overflow:hidden">
-                        <div class="cl-prompt-header" data-key="${key}" style="padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;background:${C.bgCard}">
-                            <span>${meta.icon}</span>
-                            <div style="flex:1">
-                                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${meta.label}</div>
-                                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${meta.desc}</div>
-                            </div>
-                            <span style="font-size:10px;color:${C.accent}">슬롯 ${activeIdx+1}</span>
-                            <span style="color:${C.textDim}">▾</span>
-                        </div>
-                        <div class="cl-prompt-body" data-key="${key}" style="display:none;padding:12px">
-                            <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
-                                <span style="font-size:10px;color:${C.textDim}">슬롯:</span>
-                                ${p.slots.map((s, i) => `<button class="cl-slot-btn" data-key="${key}" data-idx="${i}" style="padding:4px 10px;background:${i===activeIdx?C.accent+'33':'none'};border:1px solid ${i===activeIdx?C.accent:C.border};border-radius:2px;cursor:pointer;color:${i===activeIdx?C.accent:C.textDim};font-size:10px">${s.name||`슬롯${i+1}`}</button>`).join('')}
-                                <button class="cl-slot-add" data-key="${key}" style="padding:4px 8px;background:none;border:1px dashed ${C.border};border-radius:2px;cursor:pointer;color:${C.textDim};font-size:10px">+ 추가</button>
-                            </div>
-                            <div style="margin-bottom:8px">
-                                <div style="font-size:9px;color:${C.textDim};margin-bottom:4px;letter-spacing:1px">슬롯 이름</div>
-                                <input class="cl-slot-name" data-key="${key}" value="${esc(slot?.name||`슬롯${activeIdx+1}`)}" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:6px 8px;color:${C.text};font-size:11px;outline:none;box-sizing:border-box">
-                            </div>
-                            <div style="margin-bottom:8px">
-                                <div style="font-size:9px;color:${C.textDim};margin-bottom:4px;letter-spacing:1px">SYSTEM</div>
-                                <textarea class="cl-slot-system" data-key="${key}" rows="3" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:6px 8px;color:${C.text};font-size:11px;outline:none;box-sizing:border-box;resize:vertical;line-height:1.6">${esc(slot?.system||'')}</textarea>
-                            </div>
-                            <div style="margin-bottom:8px">
-                                <div style="font-size:9px;color:${C.textDim};margin-bottom:4px;letter-spacing:1px">USER ({{변수}} 사용 가능)</div>
-                                <textarea class="cl-slot-user" data-key="${key}" rows="6" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:6px 8px;color:${C.text};font-size:11px;outline:none;box-sizing:border-box;resize:vertical;line-height:1.6">${esc(slot?.user||'')}</textarea>
-                            </div>
-                            <div style="display:flex;gap:6px">
-                                <button class="cl-slot-save" data-key="${key}" style="flex:1;background:${C.accent};border:none;border-radius:2px;padding:7px;cursor:pointer;color:#fff;font-size:11px;font-weight:700">💾 저장</button>
-                                <button class="cl-slot-reset" data-key="${key}" style="padding:7px 10px;background:none;border:1px solid ${C.border};border-radius:2px;cursor:pointer;color:${C.textDim};font-size:10px">기본값</button>
-                                ${p.slots.length > 1 ? `<button class="cl-slot-del" data-key="${key}" style="padding:7px 10px;background:none;border:1px solid ${C.border};border-radius:2px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>` : ''}
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>`}
+            <button id="cl-clear-all" style="width:100%;background:none;border:1px solid #550033;border-radius:2px;padding:8px;cursor:pointer;color:#aa4466;font-size:11px">🗑 전체 데이터 삭제</button>
         </div>
 
         <div style="text-align:center;font-size:9px;color:${C.textDim};padding-top:8px;border-top:1px solid ${C.border}">
@@ -1465,71 +1427,12 @@ function renderSettings(container) {
     // 전체 삭제
     container.querySelector('#cl-clear-all')?.addEventListener('click', async () => {
         const { Popup, POPUP_RESULT } = SillyTavern.getContext();
-        const confirmed = await Popup.show.confirm('전체 삭제', '모든 캐릭터, 배틀, 궁합 데이터를 삭제합니다. 복구 불가.');
+        const confirmed = await Popup.show.confirm('전체 삭제', '모든 캐릭터, 배틀, 궁합, 사주 데이터를 삭제합니다. 복구 불가.');
         if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
-            const s = getSettings(); s.roster=[]; s.battleList=[]; s.madameList=[]; save();
+            const s = getSettings(); s.roster=[]; s.battleList=[]; s.madameList=[]; s.sajuList=[]; save();
             toastr.success('전체 삭제 완료'); renderSettings(container);
         }
     });
-
-    // 개발자 모드 잠금해제
-    if (!devUnlocked) {
-        const pwInput = container.querySelector('#cl-dev-pw');
-        const unlock = () => {
-            if (pwInput?.value === '8024') { const s=getSettings(); s.devUnlocked=true; save(); renderSettings(container); toastr.success('개발자 모드 활성화'); }
-            else toastr.error('비밀번호 틀림');
-        };
-        container.querySelector('#cl-dev-unlock')?.addEventListener('click', unlock);
-        pwInput?.addEventListener('keydown', e => { if (e.key==='Enter') unlock(); });
-        container.querySelector('#cl-dev-btn')?.addEventListener('click', () => pwInput?.focus());
-    } else {
-        container.querySelector('#cl-dev-lock')?.addEventListener('click', () => { const s=getSettings(); s.devUnlocked=false; save(); renderSettings(container); });
-        container.querySelectorAll('.cl-prompt-header').forEach(header => {
-            header.addEventListener('click', () => {
-                const body = container.querySelector(`.cl-prompt-body[data-key="${header.dataset.key}"]`);
-                if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
-            });
-        });
-        container.querySelectorAll('.cl-slot-btn').forEach(btn => btn.addEventListener('click', () => {
-            const s=getSettings(); if(!s.prompts) s.prompts={};
-            if(!s.prompts[btn.dataset.key]) s.prompts[btn.dataset.key]=structuredClone(DEFAULT_PROMPTS[btn.dataset.key]);
-            s.prompts[btn.dataset.key].active=parseInt(btn.dataset.idx); save(); renderSettings(container);
-        }));
-        container.querySelectorAll('.cl-slot-add').forEach(btn => btn.addEventListener('click', () => {
-            const s=getSettings(); if(!s.prompts) s.prompts={};
-            if(!s.prompts[btn.dataset.key]) s.prompts[btn.dataset.key]=structuredClone(DEFAULT_PROMPTS[btn.dataset.key]);
-            const def=DEFAULT_PROMPTS[btn.dataset.key].slots[0];
-            s.prompts[btn.dataset.key].slots.push({name:`슬롯${s.prompts[btn.dataset.key].slots.length+1}`,system:def.system,user:def.user});
-            s.prompts[btn.dataset.key].active=s.prompts[btn.dataset.key].slots.length-1; save(); renderSettings(container);
-        }));
-        container.querySelectorAll('.cl-slot-save').forEach(btn => btn.addEventListener('click', () => {
-            const key=btn.dataset.key, s=getSettings();
-            if(!s.prompts) s.prompts={};
-            if(!s.prompts[key]) s.prompts[key]=structuredClone(DEFAULT_PROMPTS[key]);
-            const idx=s.prompts[key].active??0;
-            s.prompts[key].slots[idx]={
-                name:container.querySelector(`.cl-slot-name[data-key="${key}"]`)?.value||`슬롯${idx+1}`,
-                system:container.querySelector(`.cl-slot-system[data-key="${key}"]`)?.value||'',
-                user:container.querySelector(`.cl-slot-user[data-key="${key}"]`)?.value||'',
-            };
-            save(); toastr.success(`${PROMPT_META[key]?.label} 저장됨`);
-        }));
-        container.querySelectorAll('.cl-slot-reset').forEach(btn => btn.addEventListener('click', () => {
-            const key=btn.dataset.key, s=getSettings();
-            if(!s.prompts) s.prompts={};
-            if(!s.prompts[key]) s.prompts[key]=structuredClone(DEFAULT_PROMPTS[key]);
-            const idx=s.prompts[key].active??0, def=DEFAULT_PROMPTS[key].slots[0];
-            s.prompts[key].slots[idx]={...def, name:s.prompts[key].slots[idx]?.name||def.name};
-            save(); renderSettings(container); toastr.success('기본값 복원');
-        }));
-        container.querySelectorAll('.cl-slot-del').forEach(btn => btn.addEventListener('click', () => {
-            const key=btn.dataset.key, s=getSettings();
-            if(!s.prompts?.[key]||s.prompts[key].slots.length<=1) return;
-            const idx=s.prompts[key].active??0;
-            s.prompts[key].slots.splice(idx,1);
-            s.prompts[key].active=Math.max(0,idx-1); save(); renderSettings(container);
-        }));
-    }
 }
 
 // ═══════════════════════════════════════════
@@ -1553,7 +1456,7 @@ function injectCSS() {
 }
 #cl-madame-subtabs { display: flex; }
 .cl-accordion { background: ${C.bgCard}; border: 1px solid ${C.border}; border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
-.cl-accordion.open { border-color: ${C.borderLight}; }
+.cl-accordion.open { border-color: ${C.borderLight}; box-shadow: 0 0 10px ${C.purple}22; }
 .cl-accordion-header { padding: 11px 13px; cursor: pointer; display: flex; align-items: center; gap: 10px; }
 .cl-accordion.open .cl-accordion-header { background: ${C.bgDeep}; }
 .cl-accordion-icon { font-size: 15px; }
@@ -1564,21 +1467,25 @@ function injectCSS() {
 .cl-accordion.open .cl-accordion-arrow { transform: rotate(180deg); }
 .cl-accordion-body { display: none; padding: 0 13px 13px; border-top: 1px solid ${C.border}; }
 .cl-accordion.open .cl-accordion-body { display: block; }
+
+/* 번쩍번쩍 애니메이션 */
+@keyframes cl-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+@keyframes cl-shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+@keyframes cl-pulse-gold { 0%,100%{box-shadow:0 0 8px #ffaa0066,0 0 20px #aa006622} 50%{box-shadow:0 0 20px #ffaa00cc,0 0 40px #ff006644} }
+@keyframes cl-pulse-purple { 0%,100%{box-shadow:0 0 8px #cc44ff44} 50%{box-shadow:0 0 20px #cc44ffaa,0 0 40px #8800cc44} }
+@keyframes cl-glow-red { 0%,100%{text-shadow:0 0 6px #ff220088} 50%{text-shadow:0 0 16px #ff2200ff,0 0 30px #ff880066} }
+.cl-blink { animation: cl-blink 1s step-end infinite; }
+.cl-shimmer { background:linear-gradient(90deg,#ff4444,#ff9900,#ff66aa,#ff9900,#ff4444); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:cl-shimmer 2s linear infinite; }
+.cl-pulse-gold { animation: cl-pulse-gold 2s ease-in-out infinite; }
+.cl-pulse-purple { animation: cl-pulse-purple 2s ease-in-out infinite; }
+
 @media (max-width: 600px) {
     #scouter-float {
-        width: 100vw !important;
-        height: 100dvh !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        border-radius: 0 !important;
-        resize: none !important;
+        width: 100vw !important; height: 100dvh !important;
+        top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+        border-radius: 0 !important; resize: none !important;
     }
-    #cl-content {
-        overflow-y: scroll !important;
-        -webkit-overflow-scrolling: touch;
-    }
+    #cl-content { overflow-y: scroll !important; -webkit-overflow-scrolling: touch; }
 }
     `;
     document.head.appendChild(style);
