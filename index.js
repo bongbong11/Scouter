@@ -155,11 +155,40 @@ async function analyzeCharSheet(name, gender, rawSheet) {
     return parsed;
 }
 
+async function analyzeCombatProfile(char) {
+    const slot = getPromptSlot('combatProfile');
+    const raw = char.parsed?.raw || [char.parsed?.appearance, char.parsed?.personality, char.parsed?.traits, char.parsed?.job].filter(Boolean).join('\n');
+    const prompt = fillTpl(slot.user, { name: char.name, sheet: raw });
+    try {
+        const result = await callAI(prompt, slot.system);
+        return JSON.parse(result.replace(/```json|```/g, '').trim());
+    } catch {
+        return { physique: char.parsed?.appearance || '', species: '인간', job_combat: char.parsed?.job || '', experience: '', skills: '', strengths: '', weaknesses: '', psychology: char.parsed?.personality || '', background: '' };
+    }
+}
+
 async function runBattlePrompt(fighters) {
+    // 1단계: 파이터별 전투 프로파일 분석
+    toastr.info('전투 프로파일 분석 중...');
+    const profiles = await Promise.all(fighters.map(f => analyzeCombatProfile(f)));
+
+    // 2단계: 분석 결과 + stats 합쳐서 배틀 프롬프트에 넘김
     const slot = getPromptSlot('combat');
-    const fightersText = fighters.map(f =>
-        `【${f.name}】(${f.gender === 'female' ? '여' : '남'}, ${f.parsed.age}, ${f.parsed.job})\n성격: ${f.parsed.personality}\n특징: ${f.parsed.traits}\n전투력: ${f.stats.combat}pt / 언변: ${f.stats.roast}pt`
-    ).join('\n\n');
+    const fightersText = fighters.map((f, i) => {
+        const p = profiles[i];
+        return `【${f.name}】
+▸ 신체/나이대: ${p.physique}
+▸ 종족/존재: ${p.species}
+▸ 직업 전투 해석: ${p.job_combat}
+▸ 실전 경험: ${p.experience}
+▸ 전투 특기: ${p.skills}
+▸ 강점: ${p.strengths}
+▸ 약점: ${p.weaknesses}
+▸ 심리: ${p.psychology}
+▸ 과거사: ${p.background}
+▸ 능력치 — 전투력: ${f.stats.combat}pt / 언변: ${f.stats.roast}pt / 정신력: ${f.stats.mental}pt / 카리스마: ${f.stats.charisma}pt`;
+    }).join('\n\n');
+
     const { condition } = state.battleSetup;
     const condText = condition?.trim() ? `조건/상황: ${condition}` : '조건 없음 — 그냥 붙여라.';
     return await callAI(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
@@ -567,9 +596,18 @@ function importSTChars() {
     const ctx = SillyTavern.getContext();
     const chars = ctx.characters || [];
     if (!chars.length) { toastr.warning('불러올 캐릭터가 없습니다'); return; }
-    const list = chars.map((c, i) => `<div class="cl-imp" data-idx="${i}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px">${esc(c.name)}</div>`).join('');
+    const list = chars.map((c, i) => {
+        const avatar = c.avatar ? `/thumbnail?type=avatar&file=${encodeURIComponent(c.avatar)}` : null;
+        return `<div class="cl-imp" data-idx="${i}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px;display:flex;align-items:center;gap:10px">
+            ${avatar ? `<img src="${avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid ${C.border};flex-shrink:0" onerror="this.style.display='none'">` : `<div style="width:36px;height:36px;border-radius:50%;background:${C.bgCard};border:1px solid ${C.border};flex-shrink:0"></div>`}
+            <div>
+                <div style="font-weight:700">${esc(c.name)}</div>
+                <div style="font-size:10px;color:${C.textDim}">${esc(c.description?.slice(0,40) || '')}${c.description?.length > 40 ? '...' : ''}</div>
+            </div>
+        </div>`;
+    }).join('');
     const { Popup, POPUP_TYPE } = SillyTavern.getContext();
-    const popup = new Popup(`<div style="max-height:300px;overflow-y:auto;background:${C.bgDeep}">${list}</div>`, POPUP_TYPE.TEXT, '', { okButton: '닫기' });
+    const popup = new Popup(`<div style="max-height:400px;overflow-y:auto;background:${C.bgDeep}">${list}</div>`, POPUP_TYPE.TEXT, '', { okButton: '닫기' });
     setTimeout(() => {
         document.querySelectorAll('.cl-imp').forEach(item => item.addEventListener('click', () => {
             const c = chars[parseInt(item.dataset.idx)];
@@ -583,15 +621,23 @@ function importSTChars() {
 async function importPersonas() {
     try {
         const { power_user } = await import('/scripts/power-user.js');
+        const { getUserAvatars } = await import('/scripts/personas.js');
         const personas = power_user?.personas || {};
         const descriptions = power_user?.persona_descriptions || {};
         const entries = Object.entries(personas).filter(([, name]) => name && name !== '[Unnamed Persona]');
         if (!entries.length) { toastr.warning('등록된 페르소나가 없습니다'); return; }
-        const list = entries.map(([file, name]) =>
-            `<div class="cl-imp-p" data-file="${esc(file)}" data-name="${esc(name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px;display:flex;align-items:center;gap:8px">👤 ${esc(name)}</div>`
-        ).join('');
+        const list = entries.map(([file, name]) => {
+            const avatar = `/thumbnail?type=avatar&file=${encodeURIComponent(file)}`;
+            return `<div class="cl-imp-p" data-file="${esc(file)}" data-name="${esc(name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px;display:flex;align-items:center;gap:10px">
+                <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid ${C.border};flex-shrink:0" onerror="this.style.display='none'">
+                <div>
+                    <div style="font-weight:700">${esc(name)}</div>
+                    <div style="font-size:10px;color:${C.textDim}">${esc(file.replace(/^\d+-/, '').replace('.png', ''))}</div>
+                </div>
+            </div>`;
+        }).join('');
         const { Popup, POPUP_TYPE } = SillyTavern.getContext();
-        const popup = new Popup(`<div style="max-height:300px;overflow-y:auto;background:${C.bgDeep}">${list}</div>`, POPUP_TYPE.TEXT, '', { okButton: '닫기' });
+        const popup = new Popup(`<div style="max-height:400px;overflow-y:auto;background:${C.bgDeep}">${list}</div>`, POPUP_TYPE.TEXT, '', { okButton: '닫기' });
         setTimeout(() => {
             document.querySelectorAll('.cl-imp-p').forEach(item => item.addEventListener('click', () => {
                 const file = item.dataset.file, name = item.dataset.name;
