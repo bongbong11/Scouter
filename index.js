@@ -1501,41 +1501,40 @@ async function callAIFortune(prompt, systemPrompt) {
     return filterPhoneTrigger(result || '');
 }
 
-async function runFortunePrompt() {
+async function runFortunePrompt(lang = 'ko') {
     const ctx = SillyTavern.getContext();
     const char = ctx.characters?.[ctx.characterId];
-    const charName = char?.name || '상대방';
+    const charName = char?.name || 'the character';
+    const outputLang = lang === 'en' ? 'English' : 'Korean';
 
-    const system = `당신은 챗씨부인이라는 신묘한 점쟁이입니다. MINE신의 계시를 받아 두 사람의 운명을 꿰뚫어보는 능력자.
-말투는 "~이로다", "~하느니라", "~하구나" 등 전통 점집 말투로.
-지금까지의 대화와 캐릭터 설정을 깊이 읽고 두 사람의 관계와 미래를 분석하느니라.
-좋은 것만 말하지 말고, 위기나 파국도 보이면 솔직하게 말할 것.
-마크다운 볼드(**) 사용 금지.`;
+    const system = `You are an insightful relationship analyst and fortune teller. Analyze the two characters' relationship and future based on the chat history, character sheets, and lore provided in the context. Be specific — reference actual events, dialogue, and moments from the chat. Do not be vague or poetic. Be direct and analytical. Negative outcomes (crisis, betrayal, breakup) should be stated clearly if the context supports them. Write output in ${outputLang}.`;
 
-    const prompt = `지금까지의 대화 내용, 캐릭터 시트, 세계관 설정을 바탕으로 두 사람(${charName}과 유저)의 운명을 풀이하라.
+    const prompt = `Based on everything in the current context (chat history, character sheet, scenario, lore), analyze the relationship between the user and ${charName}.
 
-아래 항목을 순서대로 풀이하라:
+Be SPECIFIC — cite actual moments, lines of dialogue, or events from the chat. Do not give generic fortune-telling. Every claim should be grounded in something that actually happened or was established in the context.
+
+Output the following sections in order:
 
 🔮 【현재의 기운】
-지금 이 관계가 어느 단계인지, 두 사람 사이의 주요 긴장과 갈등 포인트 (3-4문장)
+Current relationship stage and main tension/conflict points. Reference specific moments from the chat. (3-4 sentences)
 
 💭 【숨겨진 기운】
-두 사람이 드러내지 않는 진짜 감정, 권력 구도, 숨기고 있는 것 (3-4문장)
+What each character is really feeling but not showing. Power dynamics. Hidden agendas. Cite evidence from the chat. (3-4 sentences)
 
 ⚡ 【욕망의 기운】
-서로가 진짜 원하는 것, 잠자리 궁합과 욕망의 방향성 (3-4문장)
+What each truly wants from the other. Sexual/physical compatibility based on character sheets. Direction of desire. (3-4 sentences)
 
 🌪️ 【위기의 기운】
-이 관계의 최대 위기 시점, 외부 인물 개입 가능성, 배신이나 비밀 폭로 가능성 (3-4문장)
+The relationship's greatest crisis point. Possible external interference. Risk of betrayal or secret exposure. Be specific about what could trigger it. (3-4 sentences)
 
 🌊 【미래의 기운】
-가까운 미래 흐름, 관계를 바꿀 결정적 전환점, 누가 더 무너지는지 (3-4문장)
+Near-future trajectory. The pivotal turning point. Who breaks first emotionally. (3-4 sentences)
 
 👨‍👩‍👧 【인연의 기운】
-결혼/동거/이별 가능성, 아이는 몇 명 어떤 아이일지, 노년에 어떻게 될지 (3-5문장)
+Marriage/cohabitation/separation likelihood. Children (how many, what kind). How they end up in old age. (3-5 sentences)
 
 ✨ 【챗씨부인의 총평】
-해피엔딩/파국 가능성, 가장 극적인 결말, 챗씨부인의 한마디 (2-3문장)`;
+Happy ending vs. tragedy probability. Most dramatic possible ending. Final one-liner. (2-3 sentences)`;
 
     return await callAIFortune(prompt, system);
 }
@@ -1582,12 +1581,36 @@ function renderFortune(container) {
             </div>
         </div>
 
+        ${renderDivider('출력 언어', '#ffcc00')}
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+            <button id="cl-fortune-lang-ko" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:#ffcc0033;border:2px solid #ffcc00;color:#ffcc00">🇰🇷 한국어</button>
+            <button id="cl-fortune-lang-en" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:none;border:1px solid ${C.border};color:${C.textDim}">🇺🇸 English</button>
+        </div>
+
         <button id="cl-fortune-go" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0088;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700;margin-bottom:16px;text-shadow:0 0 8px #ffcc0088">
             🔯 MINE신의 계시를 받습니다
         </button>
 
         <div id="cl-fortune-result"></div>
     </div>`;
+
+    let fortuneLang = 'ko';
+
+    const btnKo = container.querySelector('#cl-fortune-lang-ko');
+    const btnEn = container.querySelector('#cl-fortune-lang-en');
+    function setLang(lang) {
+        fortuneLang = lang;
+        btnKo.style.background = lang === 'ko' ? '#ffcc0033' : 'none';
+        btnKo.style.borderColor = lang === 'ko' ? '#ffcc00' : C.border;
+        btnKo.style.color = lang === 'ko' ? '#ffcc00' : C.textDim;
+        btnKo.style.borderWidth = lang === 'ko' ? '2px' : '1px';
+        btnEn.style.background = lang === 'en' ? '#ffcc0033' : 'none';
+        btnEn.style.borderColor = lang === 'en' ? '#ffcc00' : C.border;
+        btnEn.style.color = lang === 'en' ? '#ffcc00' : C.textDim;
+        btnEn.style.borderWidth = lang === 'en' ? '2px' : '1px';
+    }
+    btnKo?.addEventListener('click', () => setLang('ko'));
+    btnEn?.addEventListener('click', () => setLang('en'));
 
     container.querySelector('#cl-fortune-profile')?.addEventListener('change', e => {
         const s = getSettings(); s.fortuneProfileName = e.target.value || null; save();
@@ -1597,15 +1620,30 @@ function renderFortune(container) {
     container.querySelector('#cl-fortune-go')?.addEventListener('click', async () => {
         const resultEl = container.querySelector('#cl-fortune-result');
         resultEl.innerHTML = `<div style="text-align:center;padding:30px;color:${C.textDim};font-size:12px;font-family:'Noto Serif KR',serif">
-            챗씨부인이 MINE신을 받습니다...<br>
-            <span style="font-size:10px;color:#664433;margin-top:8px;display:block">채팅과 로어북을 읽는 중이로다...</span>
+            MINE신의 계시가 내려오고 있습니다...<br>
+            <span style="font-size:10px;color:#664433;margin-top:8px;display:block">채팅과 컨텍스트를 분석하는 중...</span>
         </div>`;
         try {
-            const text = await runFortunePrompt();
-            resultEl.innerHTML = renderFortuneResult(text);
+            const text = await runFortunePrompt(fortuneLang);
+            let html = renderFortuneResult(text);
+            if (fortuneLang === 'en') {
+                html += `<button id="cl-fortune-translate" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700;margin-top:8px">🌐 한국어로 번역</button>`;
+            }
+            resultEl.innerHTML = html;
             resultEl.querySelectorAll('.cl-accordion-header').forEach(h =>
                 h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
             );
+            container.querySelector('#cl-fortune-translate')?.addEventListener('click', async () => {
+                const translateBtn = container.querySelector('#cl-fortune-translate');
+                translateBtn.textContent = '번역 중...'; translateBtn.disabled = true;
+                try {
+                    const translated = await callAIFortune(`Translate the following to Korean naturally:\n\n${text}`, 'You are a translator. Translate to Korean. Keep the section headers (🔮 【현재의 기운】 etc.) as-is.');
+                    resultEl.innerHTML = renderFortuneResult(translated);
+                    resultEl.querySelectorAll('.cl-accordion-header').forEach(h =>
+                        h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
+                    );
+                } catch (e) { toastr.error('번역 실패'); translateBtn.textContent = '🌐 한국어로 번역'; translateBtn.disabled = false; }
+            });
         } catch (e) {
             resultEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:12px">실패: ${esc(e.message)}</div>`;
         }
