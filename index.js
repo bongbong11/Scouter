@@ -88,7 +88,13 @@ function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 function filterPhoneTrigger(text) {
-    return (text || '').replace(/<phone_trigger[^>]*>[\s\S]*?<\/phone_trigger>/gi, '').replace(/---\s*$/, '').trim();
+    return (text || '')
+        .replace(/<phone_trigger[^>]*>[\s\S]*?<\/phone_trigger>/gi, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/_{2}(.+?)_{2}/g, '$1')
+        .replace(/---\s*$/, '')
+        .trim();
 }
 
 // ═══════════════════════════════════════════
@@ -1412,15 +1418,15 @@ function renderSajuResult2(container) {
 
 function renderSajuAccordions(text) {
     const sections = [
-        { icon: '🔮', key: '사주팔자',      summary: '년주·월주·일주·시주' },
-        { icon: '🌊', key: '오행의 기운',   summary: '지배하는 기운과 부족한 기운' },
-        { icon: '⚡', key: '이 자의 본질',  summary: '캐릭터의 핵심과 롤플 포인트' },
-        { icon: '🌟', key: '필요한 기운',   summary: '없으면 흔들리는 것' },
-        { icon: '💼', key: '돈과 일의 기운',summary: '직업운과 재물운' },
-        { icon: '💕', key: '인연의 기운',   summary: '연애운과 어울리는 상대' },
-        { icon: '🏥', key: '몸의 기운',     summary: '건강운' },
+        { icon: '🔮', key: '사주팔자',       summary: '년주·월주·일주·시주' },
+        { icon: '🌊', key: '오행의 기운',    summary: '지배하는 기운과 부족한 기운' },
+        { icon: '⚡', key: '이 자의 본질',   summary: '핵심 본질과 공략 포인트' },
+        { icon: '🌟', key: '필요한 기운',    summary: '약점과 공략 키' },
+        { icon: '🔥', key: '욕망의 기운',    summary: '잠자리 + 금전 스타일' },
+        { icon: '😤', key: '기질의 기운',    summary: '화 + 술버릇 + 습관' },
+        { icon: '💕', key: '인연의 기운',    summary: '연애운 + 인간관계' },
         { icon: '📅', key: '지금 이 시기의 기운', summary: '현재 운세' },
-        { icon: '✨', key: '챗씨부인의 한마디', summary: '롤플할 때 가장 중요한 포인트' },
+        { icon: '✨', key: '챗씨부인의 한마디', summary: '공략 핵심 한 줄' },
     ];
     const allIcons = sections.map(s => s.icon);
     return sections.map(s => {
