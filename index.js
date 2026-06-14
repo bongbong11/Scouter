@@ -12,15 +12,11 @@ const MODULE_NAME = 'character_lab';
 // ═══════════════════════════════════════════
 const STAT_META = {
     combat:   { label: '⚔️ 전투력',   color: '#c0824a' },
-    roast:    { label: '🗣️ 말싸움',   color: '#b87333' },
+    roast:    { label: '🗣️ 언변',     color: '#b87333' },
     sex:      { label: '🔥 성적매력', color: '#a0522d' },
     mental:   { label: '🧠 정신력',   color: '#8b6914' },
     charisma: { label: '👑 카리스마', color: '#cd853f' },
 };
-const BATTLE_CATS = [
-    { id: 'combat', label: '⚔️ 육탄전', color: '#c0824a' },
-    { id: 'roast',  label: '🗣️ 말싸움', color: '#b87333' },
-];
 const GENDER_SECTIONS = [
     { id: 'female', label: '♀ 여성', color: '#c87070' },
     { id: 'male',   label: '♂ 남성', color: '#7090b8' },
@@ -61,11 +57,10 @@ let state = {
     detailCharId: null,
     activeBattleId: null,
     activeMadameId: null,
-    battleSetup: { selected: [], category: 'combat', condition: '' },
+    battleSetup: { selected: [], condition: '' },
     madameSetup: { selected: [] },
     simSetup: { selected: [], situation: '' },
     simResult: null,
-    battleMode: 'pokemon', // 'pokemon' | 'serious'
     isPanelOpen: false,
 };
 
@@ -144,14 +139,13 @@ async function analyzeCharSheet(name, gender, rawSheet) {
     }
 }
 
-async function runBattlePrompt(fighters, category, serious = false) {
-    const key = serious ? 'combatS' : (category === 'roast' ? 'roast' : 'combat');
-    const slot = getPromptSlot(key);
+async function runBattlePrompt(fighters) {
+    const slot = getPromptSlot('combat');
     const fightersText = fighters.map(f =>
-        `【${f.name}】(${f.gender === 'female' ? '여' : '남'}, ${f.parsed.age}, ${f.parsed.job})\n성격: ${f.parsed.personality}\n특징: ${f.parsed.traits}\n${category === 'roast' ? '말싸움' : '전투력'} 수치: ${f.stats[category]}pt`
+        `【${f.name}】(${f.gender === 'female' ? '여' : '남'}, ${f.parsed.age}, ${f.parsed.job})\n성격: ${f.parsed.personality}\n특징: ${f.parsed.traits}\n전투력: ${f.stats.combat}pt / 언변: ${f.stats.roast}pt`
     ).join('\n\n');
     const { condition } = state.battleSetup;
-    const condText = condition?.trim() ? `상황/조건: ${condition}` : '특별한 조건 없음.';
+    const condText = condition?.trim() ? `조건/상황: ${condition}` : '조건 없음 — 그냥 붙여라.';
     return await callAI(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
 }
 
@@ -753,14 +747,13 @@ function renderBattle(container) {
     if (state.battleView === 'setup') { renderBattleSetup(container); return; }
 
     const cards = settings.battleList.map(b => {
-        const cm = BATTLE_CATS.find(c => c.id === b.category) || BATTLE_CATS[0];
-        return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${cm.color};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-battle-card" data-id="${b.id}">
+        return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.accent};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-battle-card" data-id="${b.id}">
             <div style="flex:1">
                 <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(b.fighters.join(' VS '))}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${cm.label} · ${esc(b.condition||'조건 없음')}</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(b.condition||'조건 없음')}</div>
             </div>
             <div style="text-align:right">
-                <div style="font-size:11px;color:${cm.color};font-weight:700">🏆 ${esc(b.result)}</div>
+                <div style="font-size:11px;color:${C.accent};font-weight:700">🏆 ${esc(b.result)}</div>
                 <div style="font-size:9px;color:${C.textDim}">${esc(b.createdAt)}</div>
             </div>
             <button class="cl-battle-del" data-id="${b.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
@@ -788,8 +781,6 @@ function renderBattle(container) {
 function renderBattleSetup(container) {
     const settings = getSettings();
     const { selected, category, condition } = state.battleSetup;
-    const catMeta = BATTLE_CATS.find(c => c.id === category) || BATTLE_CATS[0];
-
     const charRows = GENDER_SECTIONS.map(g => {
         const group = settings.roster.filter(c => c.gender === g.id);
         if (!group.length) return '';
@@ -797,11 +788,14 @@ function renderBattleSetup(container) {
             <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
             ${group.map(char => {
                 const inSel = !!selected.find(c => c.id === char.id);
-                return `<div class="cl-sel-char" data-id="${char.id}" style="background:${inSel?catMeta.color+'22':C.bgCard};border:2px solid ${inSel?catMeta.color:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
+                return `<div class="cl-sel-char" data-id="${char.id}" style="background:${inSel?C.accent+'22':C.bgCard};border:2px solid ${inSel?C.accent:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
                     ${renderAvatar(char.name, char.gender, 32)}
                     <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${inSel?C.textBright:C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.job||'—')}</div></div>
-                    <div style="font-size:15px;font-weight:900;color:${catMeta.color}">${char.stats[category]}</div>
-                    ${inSel?`<div style="color:${catMeta.color}">✓</div>`:''}
+                    <div style="text-align:right;font-size:10px;color:${C.textDim}">
+                        <div>⚔️ ${char.stats.combat}</div>
+                        <div>🗣️ ${char.stats.roast}</div>
+                    </div>
+                    ${inSel?`<div style="color:${C.accent}">✓</div>`:''}
                 </div>`;
             }).join('')}
         </div>`;
@@ -812,21 +806,16 @@ function renderBattleSetup(container) {
             <button id="cl-battle-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
             <span style="font-size:13px;font-weight:700;color:${C.accent}">배틀 설정</span>
         </div>
-        ${renderDivider('배틀 종류', C.accent)}
-        <div style="display:flex;gap:8px;margin-bottom:16px">
-            ${BATTLE_CATS.map(c => `<button class="cl-cat-btn" data-cat="${c.id}" style="flex:1;background:${category===c.id?c.color+'22':C.bgCard};border:2px solid ${category===c.id?c.color:C.border};border-radius:2px;padding:10px;cursor:pointer;color:${category===c.id?c.color:C.textDim};font-size:12px;font-weight:700">${c.label}</button>`).join('')}
-        </div>
         ${renderDivider('파이터 선택 (2명 이상)', C.accent)}
         ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:12px 0">등록된 캐릭터 없음</div>`}
-        ${renderDivider('조건', C.accentDim)}
-        <textarea id="cl-battle-condition" rows="3" placeholder="예) 삼각관계 폭로 현장에서&#10;비워두면 조건 없음" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px">${esc(condition)}</textarea>
+        ${renderDivider('조건/상황', C.accentDim)}
+        <textarea id="cl-battle-condition" rows="3" placeholder="예) 삼각관계 폭로 현장에서 마주침&#10;예) 말다툼으로 번질 것 같은 상황&#10;비워두면 그냥 붙어라" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px">${esc(condition)}</textarea>
         <button id="cl-battle-start" ${selected.length<2?'disabled':''} style="width:100%;background:${selected.length>=2?C.accent:'#2a1e12'};border:none;border-radius:2px;padding:9px;cursor:${selected.length>=2?'pointer':'not-allowed'};color:${selected.length>=2?'#fff':C.textDim};font-size:12px;font-weight:700">
-            ${selected.length<2?`파이터 ${Math.max(0,2-selected.length)}명 더 필요`:`⚡ ${selected.length}명 배틀`}
+            ${selected.length<2?`파이터 ${Math.max(0,2-selected.length)}명 더 필요`:`⚡ ${selected.length}명 배틀 분석`}
         </button>
     </div>`;
 
     container.querySelector('#cl-battle-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
-    container.querySelectorAll('.cl-cat-btn').forEach(btn => btn.addEventListener('click', () => { state.battleSetup.category=btn.dataset.cat; state.battleSetup.selected=[]; renderBattleSetup(container); }));
     container.querySelectorAll('.cl-sel-char').forEach(el => el.addEventListener('click', () => {
         const char = getSettings().roster.find(c => c.id === el.dataset.id);
         if (!char) return;
@@ -836,19 +825,17 @@ function renderBattleSetup(container) {
     }));
     container.querySelector('#cl-battle-condition')?.addEventListener('input', e => state.battleSetup.condition = e.target.value);
     container.querySelector('#cl-battle-start')?.addEventListener('click', async () => {
-        const { selected, category, condition } = state.battleSetup;
+        const { selected, condition } = state.battleSetup;
         if (selected.length < 2) return;
-        toastr.clear();
         showLoading(null, 'battle');
         try {
-            const resultText = await runBattlePrompt(selected, category, false);
-            const m = resultText.match(/【승자[：:]\s*(.+?)】/);
+            const resultText = await runBattlePrompt(selected);
+            const m = resultText.match(/【.{0,4}승자[：:]\s*(.+?)】/);
             const winner = m ? m[1].trim() : selected[0].name;
-            const seriousText = await runBattlePrompt(selected, category, true);
             hideLoading();
-            const session = { id: 'battle_' + Date.now(), fighters: selected.map(f => f.name), category, condition, result: winner, resultText, seriousText, createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
+            const session = { id: 'battle_' + Date.now(), fighters: selected.map(f => f.name), condition, result: winner, resultText, createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
             const s = getSettings(); s.battleList.unshift(session); save();
-            state.activeBattleId = session.id; state.battleMode = 'pokemon'; state.battleView = 'result'; renderActivePane();
+            state.activeBattleId = session.id; state.battleView = 'result'; renderActivePane();
         } catch (e) { hideLoading(); toastr.error(`배틀 실패: ${e.message}`); }
     });
 }
@@ -858,36 +845,29 @@ function renderBattleResult(container) {
     const session = settings.battleList.find(b => b.id === state.activeBattleId);
     if (!session) { state.battleView='list'; renderActivePane(); return; }
     const fighters = session.fighters.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
-    const catMeta = BATTLE_CATS.find(c => c.id === session.category) || BATTLE_CATS[0];
-    const isPokemon = state.battleMode === 'pokemon';
-    const text = isPokemon ? (session.resultText || '') : (session.seriousText || session.resultText || '');
 
-    container.innerHTML = `<div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
+    container.innerHTML = `
+    <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
         <button id="cl-br-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;margin-bottom:8px;padding:0">◀ 목록</button>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:6px">
             ${fighters.slice(0,2).map((f,i) => `
             <div style="flex:1;display:flex;align-items:center;gap:8px;justify-content:${i===0?'flex-start':'flex-end'}">
                 ${i===0?renderAvatar(f.name,f.gender,34):''}
                 <div style="text-align:${i===0?'left':'right'}">
                     <div style="font-size:11px;font-weight:700;color:${C.textBright}">${esc(f.name)}</div>
-                    <div style="font-size:12px;font-weight:900;color:${catMeta.color}">${f.stats[session.category]}pt</div>
+                    <div style="font-size:10px;color:${C.textDim}">⚔️${f.stats.combat} 🗣️${f.stats.roast}</div>
                 </div>
                 ${i===1?renderAvatar(f.name,f.gender,34):''}
             </div>
-            ${i===0?`<div style="font-weight:900;font-size:13px;color:${catMeta.color};padding:0 6px">VS</div>`:''}`).join('')}
+            ${i===0?`<div style="font-weight:900;font-size:13px;color:${C.accent};padding:0 6px">VS</div>`:''}`).join('')}
         </div>
-        <div style="display:flex;gap:8px">
-            <button id="cl-mode-pokemon" style="flex:1;background:${isPokemon?catMeta.color+'33':'none'};border:1px solid ${isPokemon?catMeta.color:C.border};border-radius:2px;padding:6px;cursor:pointer;color:${isPokemon?catMeta.color:C.textDim};font-size:11px">🎮 포켓몬</button>
-            <button id="cl-mode-serious" style="flex:1;background:${!isPokemon?C.gold+'33':'none'};border:1px solid ${!isPokemon?C.gold:C.border};border-radius:2px;padding:6px;cursor:pointer;color:${!isPokemon?C.gold:C.textDim};font-size:11px">📊 시리어스</button>
-        </div>
+        ${session.condition?`<div style="margin-top:8px;font-size:10px;color:${C.textDim};padding:6px 8px;background:${C.bgCard};border-radius:2px">📍 ${esc(session.condition)}</div>`:''}
     </div>
     <div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap;font-family:${isPokemon?'monospace':'inherit'}">${esc(text)}</div>
+        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(session.resultText||'')}</div>
     </div>`;
 
     container.querySelector('#cl-br-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
-    container.querySelector('#cl-mode-pokemon')?.addEventListener('click', () => { state.battleMode='pokemon'; renderBattleResult(container); });
-    container.querySelector('#cl-mode-serious')?.addEventListener('click', () => { state.battleMode='serious'; renderBattleResult(container); });
 }
 
 // ═══════════════════════════════════════════
