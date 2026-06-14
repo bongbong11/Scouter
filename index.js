@@ -140,7 +140,7 @@ async function analyzeCharSheet(name, gender, rawSheet) {
         if (!parsed.gender) parsed.gender = gender;
         return parsed;
     } catch {
-        return { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 }, nsfw: { body: '정보 없음', kink: '정보 없음', sexual_style: '정보 없음', preference: '정보 없음' } };
+        return { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 }, intimacy: { physique: '정보 없음', desire: '정보 없음', style: '정보 없음', preference: '정보 없음' } };
     }
 }
 
@@ -158,15 +158,15 @@ async function runBattlePrompt(fighters, category, serious = false) {
 async function runCompatPrompt(cast, allowSame) {
     const slot = getPromptSlot('compat');
     const castDesc = cast.map(c => {
-        const nsfw = c.parsed?.nsfw || {};
+        const intimacy = c.parsed?.intimacy || {};
         return `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})
 성격: ${c.parsed.personality}
 특징: ${c.parsed.traits}
 외형: ${c.parsed.appearance}
-신체: ${nsfw.body || '정보 없음'}
-킨크: ${nsfw.kink || '정보 없음'}
-성적 스타일: ${nsfw.sexual_style || '정보 없음'}
-성적 취향: ${nsfw.preference || '정보 없음'}`;
+신체: ${intimacy.physique || '정보 없음'}
+킨크: ${intimacy.desire || '정보 없음'}
+성적 스타일: ${intimacy.style || '정보 없음'}
+성적 취향: ${intimacy.preference || '정보 없음'}`;
     }).join('\n\n');
     const isMulti = cast.length >= 3;
     const allSameGender = cast.every(c => c.gender === cast[0].gender);
@@ -180,7 +180,7 @@ async function runCompatPrompt(cast, allowSame) {
         multiLine: isMulti ? '\n- 구도의 복잡함' : '',
         triBlock: isMulti ? `🔺 【다각 구도 분석】\n(삼각/폴리 여부, 키맨, 구도. 점쟁이 말투 4-6문장)\n` : '',
         sameGenderMode,
-        kinkSection: cast.some(c => c.parsed?.nsfw?.sexual_style && c.parsed.nsfw.sexual_style !== '정보 없음')
+        kinkSection: cast.some(c => c.parsed?.intimacy?.style && c.parsed.intimacy.style !== '정보 없음')
             ? `\n🔞 【성향 궁합】\n(각 캐릭터의 킨크/성향이 서로 어떻게 맞물리는지. 점쟁이 말투로 3-4문장. 맞으면 맞다, 안 맞으면 안 맞다고 직접적으로)`
             : '',
     }), slot.system);
@@ -679,7 +679,7 @@ function renderCharDetail(container) {
                     <div style="width:${v}%;height:100%;background:${STAT_META[s].color}"></div>
                 </div>
             </div>`).join('');
-        const nsfw = char.parsed?.nsfw || {};
+        const intimacy = char.parsed?.intimacy || {};
         const profileHTML = [
             ['나이', char.parsed?.age], ['직업', char.parsed?.job], ['지역', char.parsed?.location],
             ['외형', char.parsed?.appearance], ['성격', char.parsed?.personality], ['특징', char.parsed?.traits],
@@ -691,7 +691,7 @@ function renderCharDetail(container) {
         ).join('') + `
         <div style="border:1px solid #5a3030;border-radius:2px;padding:12px;margin-top:6px;background:#1a0f0f">
             <div style="font-size:10px;color:#c07070;font-weight:700;margin-bottom:10px;letter-spacing:1px">🔞 NSFW 정보</div>
-            ${[['신체/해부', nsfw.body], ['킨크/페티시', nsfw.kink], ['성적 스타일', nsfw.sexual_style], ['성적 취향', nsfw.preference]].map(([k, v]) =>
+            ${[['신체', intimacy.physique], ['끌림', intimacy.desire], ['성향', intimacy.style], ['취향', intimacy.preference]].map(([k, v]) =>
                 `<div style="border-bottom:1px solid #3a1f1f;padding-bottom:8px;margin-bottom:8px">
                     <div style="font-size:9px;color:#9a6060;margin-bottom:4px;letter-spacing:1px">${k}</div>
                     <div style="font-size:12px;color:#cc9988;line-height:1.7">${esc(v || '정보 없음')}</div>
