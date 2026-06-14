@@ -61,6 +61,9 @@ let state = {
     madameSetup: { selected: [] },
     simSetup: { selected: [], situation: '' },
     simResult: null,
+    sajuCharId: null,
+    sajuResult: null,
+    sajuCharName: null,
     isPanelOpen: false,
 };
 
@@ -417,12 +420,14 @@ function createFloatingPanel() {
         <div id="cl-madame-subtabs" style="display:none;flex-shrink:0;background:${C.bgDeep};border-bottom:1px solid ${C.border}">
             <button class="cl-madame-subtab" data-subtab="compat">💘 궁합</button>
             <button class="cl-madame-subtab" data-subtab="sim">🎲 시뮬</button>
+            <button class="cl-madame-subtab" data-subtab="saju">🪬 사주</button>
         </div>
         <div id="cl-content" style="flex:1;overflow-y:auto;overflow-x:hidden">
             <div class="cl-pane" id="cl-pane-roster"></div>
             <div class="cl-pane" id="cl-pane-battle"></div>
             <div class="cl-pane" id="cl-pane-madame-compat"></div>
             <div class="cl-pane" id="cl-pane-madame-sim"></div>
+            <div class="cl-pane" id="cl-pane-madame-saju"></div>
             <div class="cl-pane" id="cl-pane-settings"></div>
         </div>
     </div>`;
@@ -494,7 +499,7 @@ function switchMadameSubtab(subtab) {
     renderActivePane();
 }
 function renderActivePane() {
-    ['roster','battle','madame-compat','madame-sim','settings'].forEach(p => {
+    ['roster','battle','madame-compat','madame-sim','madame-saju','settings'].forEach(p => {
         const el = document.getElementById('cl-pane-' + p);
         if (el) el.className = 'cl-pane';
     });
@@ -503,7 +508,8 @@ function renderActivePane() {
     else if (tab === 'battle') { const el = document.getElementById('cl-pane-battle'); if (el) { el.className = 'cl-pane active'; renderBattle(el); } }
     else if (tab === 'madame') {
         if (state.currentMadameSubtab === 'compat') { const el = document.getElementById('cl-pane-madame-compat'); if (el) { el.className = 'cl-pane active'; renderMadameCompat(el); } }
-        else { const el = document.getElementById('cl-pane-madame-sim'); if (el) { el.className = 'cl-pane active'; renderMadameSim(el); } }
+        else if (state.currentMadameSubtab === 'sim') { const el = document.getElementById('cl-pane-madame-sim'); if (el) { el.className = 'cl-pane active'; renderMadameSim(el); } }
+        else if (state.currentMadameSubtab === 'saju') { const el = document.getElementById('cl-pane-madame-saju'); if (el) { el.className = 'cl-pane active'; renderMadameSaju(el); } }
     }
     else if (tab === 'settings') { const el = document.getElementById('cl-pane-settings'); if (el) { el.className = 'cl-pane active'; renderSettings(el); } }
 }
@@ -1198,6 +1204,125 @@ function renderMadameSim(container) {
 }
 
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// 챗씨부인 — 사주풀이
+// ═══════════════════════════════════════════
+function renderMadameSaju(container) {
+    const settings = getSettings();
+    const roster = settings.roster;
+    const selectedId = state.sajuCharId || null;
+    const selectedChar = roster.find(c => c.id === selectedId) || null;
+
+    const charList = GENDER_SECTIONS.map(g => {
+        const group = roster.filter(c => c.gender === g.id);
+        if (!group.length) return '';
+        return `<div style="margin-bottom:10px">
+            <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
+            ${group.map(char => {
+                const isSel = char.id === selectedId;
+                return `<div class="cl-saju-sel" data-id="${char.id}" style="background:${isSel ? C.gold+'22' : C.bgCard};border:2px solid ${isSel ? C.gold : C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
+                    ${renderAvatar(char.name, char.gender, 30)}
+                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${isSel ? C.textBright : C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.age||'—')}세 · ${esc(char.parsed?.job||'—')}</div></div>
+                    ${isSel ? `<span style="color:${C.gold}">✦</span>` : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:12px;text-align:center;margin-bottom:14px">
+            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-bottom:4px">◆◆◆◆◆</div>
+            <div style="font-size:14px;font-weight:700;color:${C.gold}">챗씨부인 사주풀이</div>
+            <div style="font-size:10px;color:${C.textDim};margin-top:3px">캐릭터의 운명을 사주로 풀어드립니다</div>
+            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-top:4px">◆◆◆◆◆</div>
+        </div>
+
+        ${renderDivider('캐릭터 선택', C.gold)}
+        ${roster.length ? charList : `<div style="color:${C.textDim};font-size:12px;padding:10px 0">등록된 캐릭터 없음</div>`}
+
+        ${selectedChar ? `
+        <button id="cl-saju-go" style="width:100%;background:${C.gold}33;border:1px solid ${C.gold}88;border-radius:2px;padding:9px;cursor:pointer;color:${C.gold};font-size:12px;font-weight:700;margin-top:4px">
+            🪬 ${esc(selectedChar.name)}의 사주 풀기
+        </button>` : `
+        <button disabled style="width:100%;background:#2a1e12;border:1px solid ${C.border};border-radius:2px;padding:9px;cursor:not-allowed;color:${C.textDim};font-size:12px">
+            캐릭터를 선택하세요
+        </button>`}
+
+        ${state.sajuResult ? `
+        <div style="margin-top:16px">
+            ${renderDivider(`${esc(state.sajuCharName)} 사주풀이`, C.gold)}
+            <div style="font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px">${esc(state.sajuResult)}</div>
+        </div>` : ''}
+    </div>`;
+
+    container.querySelectorAll('.cl-saju-sel').forEach(el => el.addEventListener('click', () => {
+        state.sajuCharId = el.dataset.id;
+        state.sajuResult = null;
+        renderMadameSaju(container);
+    }));
+
+    container.querySelector('#cl-saju-go')?.addEventListener('click', async () => {
+        if (!selectedChar) return;
+        showLoading(null, 'compat');
+        try {
+            const result = await runSajuPrompt(selectedChar);
+            state.sajuResult = result;
+            state.sajuCharName = selectedChar.name;
+            hideLoading();
+            renderMadameSaju(container);
+        } catch (e) { hideLoading(); toastr.error(`사주풀이 실패: ${e.message}`); }
+    });
+}
+
+async function runSajuPrompt(char) {
+    const system = `당신은 챗씨부인이라는 신묘한 점쟁이입니다. 한국 전통 사주명리학에 정통한 능력자. 말투는 "~이로다", "~하느니라", "~하구나" 등 전통 점집 말투로. 캐릭터의 성격/직업/나이/특징을 바탕으로 그에 걸맞은 사주팔자를 지어내고 풀이하느니라.`;
+    const prompt = `다음 캐릭터의 사주를 풀이하라. 실제 생년월일이 없으니 캐릭터의 성격과 특징에 맞는 사주를 챗씨부인이 직접 부여하고 풀이할 것.
+
+캐릭터 정보:
+이름: ${char.name}
+나이: ${char.parsed?.age || '불명'}
+직업: ${char.parsed?.job || '불명'}
+성격: ${char.parsed?.personality || ''}
+특징: ${char.parsed?.traits || ''}
+외형: ${char.parsed?.appearance || ''}
+
+아래 항목을 순서대로 풀이하라:
+
+🔮 【사주팔자】
+년주: OO년 (천간지지)
+월주: OO월
+일주: OO일 (이 사람의 본질)
+시주: OO시
+(캐릭터 성격에 맞게 천간지지 부여)
+
+🌊 【오행 분석】
+목(木) / 화(火) / 토(土) / 금(金) / 수(水) 비율과 특징
+강한 기운과 부족한 기운
+
+⚡ 【일주 풀이】
+이 사람의 본질과 기질 (3-4문장)
+
+🌟 【용신】
+이 사람에게 필요한 기운과 그 이유
+
+💼 【직업·재물운】
+타고난 직업 적성과 재물을 대하는 방식 (3-4문장)
+
+💕 【연애·인연운】
+사랑을 대하는 방식, 어떤 인연과 잘 맞는지 (3-4문장)
+
+🏥 【건강】
+주의해야 할 건강 포인트
+
+📅 【올해의 운세】
+현재 시기의 흐름과 조언 (3-4문장)
+
+✨ 【총평】
+챗씨부인의 한마디 (점쟁이 말투로 2-3문장)`;
+
+    return await callAI(prompt, system);
+}
+
 // 설정 탭
 // ═══════════════════════════════════════════
 function renderSettings(container) {
