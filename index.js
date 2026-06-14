@@ -291,11 +291,12 @@ async function loadRemotePrompts() {
     }
 }
 const LOADING_MSGS = {
-    analyze:  ['캐릭터 시트 해석 중...', '능력치 산출 중...', 'NSFW 성향 분석 중...'],
-    battle:   ['파이터 능력치 대조 중...', '배틀 시뮬레이션 가동...', '승자 판정 중...'],
-    compat:   ['챗씨부인이 닻을 내립니다...', '사주를 펼치는 중이로다...', '인연의 실이 보이는구나...'],
+    analyze:  ['캐릭터 시트 해석 중...', '능력치 산출 중...', 'MINE신이 성향을 읽는 중...'],
+    battle:   ['전투력 측정 중...', '승부의 기운이 감돕니다...', 'MINE신이 승자를 점치는 중...'],
+    compat:   ['챗씨부인이 MINE신을 받습니다...', 'MINE신이 닻을 내립니다...', '챗씨부인이 인연의 실을 잡아챕니다...'],
+    saju:     ['챗씨부인이 만세력을 펼칩니다...', 'MINE신이 천간지지를 읽고 있습니다...', '운명의 사주팔자가 드러나는구나...'],
     scenario: ['시나리오를 구성 중...', '장르를 선정 중...', '첫 장면을 그리는 중...'],
-    sim:      ['상황을 설정 중...', '캐릭터 반응 시뮬 중...', '결과를 정리 중...'],
+    sim:      ['두 사람의 기운을 읽는 중...', '상황을 펼쳐보는 중입니다...', '케미의 실이 엉키고 있습니다...'],
 };
 
 function showLoading(targetEl, type = 'analyze') {
@@ -1363,8 +1364,8 @@ function renderSajuSetup(container) {
         // 생년월일 감지 여부 미리 표시
         const raw = selectedChar.parsed?.raw || '';
         const hasBirth = /(?:생년월일|birth|born|birthday|dob)[^\d]*\d{4}|\d{4}[.\-\/년]\s*\d{1,2}[.\-\/월]\s*\d{1,2}/i.test(raw);
-        toastr.info(hasBirth ? '생년월일 감지 — 실제 사주 계산 중...' : '생년월일 없음 — 챗씨부인이 사주를 지어드립니다...');
-        showLoading(null, 'compat');
+        toastr.info(hasBirth ? '생년월일 감지 — 실제 사주 계산 중...' : '챗씨부인이 사주를 지어드립니다...');
+        showLoading(null, 'saju');
         try {
             const resultText = await runSajuPrompt(selectedChar);
             const dayM = resultText.match(/일주[：:]\s*(.+)/);
