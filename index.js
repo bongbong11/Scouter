@@ -49,17 +49,18 @@ const PROMPT_META = {
 const DEFAULT_PROMPTS = {
     analyze: { active: 0, slots: [{ name: '기본',
         system: `You are a character analysis expert. Read the character sheet and return ONLY valid JSON, no markdown code blocks.
-Gender detection rules — set "gender" to "male" if ANY of these appear: male pronouns (he/him/his), words like 남자/남성/그/아들/형/오빠/남편/아저씨/아버지/소년/청년, or explicit male anatomy references. Otherwise set "female".`,
+Gender detection: set "gender" to "male" if ANY appear: he/him/his, 남자/남성/그/아들/형/오빠/남편/아저씨/아버지/소년/청년, or male anatomy. Otherwise "female".`,
         user: `Character name: {{name}}
-Provided gender hint: {{gender}}
+Gender hint: {{gender}}
 
 Character sheet:
 {{sheet}}
 
 Return ONLY this JSON (no other text):
-{"age":"age or 불명","job":"job/role","location":"region/city","appearance":"appearance summary 1-2 sentences","personality":"personality summary 1-2 sentences","traits":"key traits/habits 1-2 sentences","kink":"sexual preferences, fetishes, turn-ons/turn-offs if mentioned — write 없음 if not specified","gender":"female or male — detect from sheet content, override the hint if sheet clearly indicates otherwise","stats":{"combat":integer 0-100,"roast":integer 0-100,"sex":integer 0-100,"mental":integer 0-100,"charisma":integer 0-100}}
+{"age":"나이 or 불명","job":"직업/역할","location":"지역/거주지","appearance":"외형 묘사 1-2문장 (체형, 신체 특징 포함)","personality":"성격 요약 1-2문장","traits":"특징/습관 1-2문장","gender":"female or male","stats":{"combat":0-100,"roast":0-100,"sex":0-100,"mental":0-100,"charisma":0-100},"nsfw":{"body":"시트에 언급된 신체/성기 묘사 그대로 — 없으면 외형 기반으로 추론해서 작성 (예: 키 크고 마른 체형이면 날렵한 체형으로 추론)","kink":"시트에 명시된 킨크/페티시/성적 취향 전부 — 없으면 성격/행동 패턴에서 추론 (예: 지배적 성격이면 dominant 성향 추론)","sexual_style":"성적 스타일/포지션 성향 — 반드시 작성. dominant/submissive/switch/aggressive/possessive/tender/sadistic/masochistic 등. 시트에 없으면 성격에서 반드시 추론","preference":"좋아하는 행위/상황/분위기 — 시트에 없으면 킨크와 성격 기반으로 추론"}}
 
-Stats must be differentiated based on character traits. Avoid clustering all values similarly.` }] },
+IMPORTANT: nsfw 항목들은 시트에 명시 안 됐어도 반드시 추론해서 채울 것. "없음"이나 "언급없음"은 절대 쓰지 말 것. 추론 기반으로라도 반드시 내용 작성.
+Stats: sex는 외형 매력도/성적 카리스마 기준. 수치 차별화 필수.` }] },
 
     combat: { active: 0, slots: [{ name: '포켓몬',
         system: `당신은 캐릭터 육탄전 배틀 내레이터입니다. 포켓몬 배틀 게임 특유의 짧고 임팩트 있는 텍스트 스타일로 씁니다. 각 캐릭터의 신체 능력과 전투 수치를 반영해서 현실감 있게 진행하세요. 마지막 줄에 반드시 【승자: 이름】 형식으로 끝내세요.`,
@@ -282,7 +283,7 @@ async function analyzeCharSheet(name, gender, rawSheet) {
         if (!parsed.gender) parsed.gender = gender;
         return parsed;
     } catch {
-        return { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', kink: '없음', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 } };
+        return { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 }, nsfw: { body: '정보 없음', kink: '정보 없음', sexual_style: '정보 없음', preference: '정보 없음' } };
     }
 }
 
@@ -299,9 +300,17 @@ async function runBattlePrompt(fighters, category, serious = false) {
 
 async function runCompatPrompt(cast, allowSame) {
     const slot = getPromptSlot('compat');
-    const castDesc = cast.map(c =>
-        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}\n외형: ${c.parsed.appearance}\n킨크/성향: ${c.parsed.kink || '없음'}`
-    ).join('\n\n');
+    const castDesc = cast.map(c => {
+        const nsfw = c.parsed?.nsfw || {};
+        return `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})
+성격: ${c.parsed.personality}
+특징: ${c.parsed.traits}
+외형: ${c.parsed.appearance}
+신체: ${nsfw.body || '정보 없음'}
+킨크: ${nsfw.kink || '정보 없음'}
+성적 스타일: ${nsfw.sexual_style || '정보 없음'}
+성적 취향: ${nsfw.preference || '정보 없음'}`;
+    }).join('\n\n');
     const isMulti = cast.length >= 3;
     const allSameGender = cast.every(c => c.gender === cast[0].gender);
     const sameGenderMode = allSameGender && !allowSame
@@ -314,7 +323,7 @@ async function runCompatPrompt(cast, allowSame) {
         multiLine: isMulti ? '\n- 구도의 복잡함' : '',
         triBlock: isMulti ? `🔺 【다각 구도 분석】\n(삼각/폴리 여부, 키맨, 구도. 점쟁이 말투 4-6문장)\n` : '',
         sameGenderMode,
-        kinkSection: cast.some(c => c.parsed?.kink && c.parsed.kink !== '없음')
+        kinkSection: cast.some(c => c.parsed?.nsfw?.sexual_style && c.parsed.nsfw.sexual_style !== '정보 없음')
             ? `\n🔞 【성향 궁합】\n(각 캐릭터의 킨크/성향이 서로 어떻게 맞물리는지. 점쟁이 말투로 3-4문장. 맞으면 맞다, 안 맞으면 안 맞다고 직접적으로)`
             : '',
     }), slot.system);
@@ -337,7 +346,87 @@ async function runSimPrompt(cast, situation) {
 }
 
 // ═══════════════════════════════════════════
-// HTML 헬퍼
+// 로딩 오버레이
+// ═══════════════════════════════════════════
+const LOADING_MSGS = {
+    analyze:  ['캐릭터 시트 해석 중...', '능력치 산출 중...', 'NSFW 성향 분석 중...'],
+    battle:   ['파이터 능력치 대조 중...', '배틀 시뮬레이션 가동...', '승자 판정 중...'],
+    compat:   ['챗씨부인이 MINE신의 부름을 받았느니라...', '닻을 내리고 있느니라...', '점괘가 나타나고 있도다...'],
+    scenario: ['시나리오를 구성 중...', '장르를 선정 중...', '첫 장면을 그리는 중...'],
+    sim:      ['상황을 설정 중...', '캐릭터 반응 시뮬 중...', '결과를 정리 중...'],
+};
+
+function showLoading(targetEl, type = 'analyze') {
+    const msgs = LOADING_MSGS[type] || LOADING_MSGS.analyze;
+    let msgIdx = 0;
+    const overlay = document.createElement('div');
+    overlay.id = 'scouter-loading';
+    overlay.style.cssText = `position:absolute;inset:0;background:${C.bg}ee;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px`;
+    overlay.innerHTML = `
+        <div style="position:relative;width:60px;height:60px">
+            <svg viewBox="0 0 60 60" style="width:60px;height:60px;animation:scouter-spin 1.2s linear infinite">
+                <circle cx="30" cy="30" r="24" fill="none" stroke="${C.border}" stroke-width="3"/>
+                <circle cx="30" cy="30" r="24" fill="none" stroke="${C.accent}" stroke-width="3"
+                    stroke-dasharray="40 110" stroke-linecap="round"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px">🔴</div>
+        </div>
+        <div id="scouter-loading-msg" style="font-size:12px;color:${C.text};font-family:monospace;letter-spacing:1px;text-align:center;max-width:200px;line-height:1.7">${msgs[0]}</div>
+        <div style="display:flex;gap:4px">
+            <div class="scouter-dot" style="width:6px;height:6px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out infinite"></div>
+            <div class="scouter-dot" style="width:6px;height:6px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
+            <div class="scouter-dot" style="width:6px;height:6px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
+        </div>`;
+
+    // 기존 로딩 제거
+    document.getElementById('scouter-loading')?.remove();
+
+    // 컨텐츠 영역에 오버레이
+    const content = document.getElementById('cl-content');
+    if (content) {
+        content.style.position = 'relative';
+        content.appendChild(overlay);
+    }
+
+    // 메시지 순환
+    const interval = setInterval(() => {
+        msgIdx = (msgIdx + 1) % msgs.length;
+        const msgEl = document.getElementById('scouter-loading-msg');
+        if (msgEl) {
+            msgEl.style.opacity = '0';
+            msgEl.style.transition = 'opacity 0.3s';
+            setTimeout(() => {
+                if (msgEl) { msgEl.textContent = msgs[msgIdx]; msgEl.style.opacity = '1'; }
+            }, 300);
+        }
+    }, 1800);
+
+    overlay._interval = interval;
+    return overlay;
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('scouter-loading');
+    if (overlay) {
+        clearInterval(overlay._interval);
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.3s';
+        setTimeout(() => overlay.remove(), 300);
+    }
+}
+
+// CSS 키프레임 추가
+function injectLoadingCSS() {
+    if (document.getElementById('scouter-loading-css')) return;
+    const s = document.createElement('style');
+    s.id = 'scouter-loading-css';
+    s.textContent = `
+@keyframes scouter-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes scouter-dot { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1.1);opacity:1} }
+    `;
+    document.head.appendChild(s);
+}
+
 // ═══════════════════════════════════════════
 const C = {
     bg: '#1a1410', bgCard: '#221c16', bgDeep: '#0f0c08',
@@ -608,21 +697,38 @@ async function importPersonas() {
     } catch (e) { toastr.error(`페르소나 로드 실패: ${e.message}`); }
 }
 
-async function addCharFromImport(name, raw, gender) {
+function detectGenderFromText(text) {
+    const male = /\b(he|him|his|boy|man|male|men|son|brother|husband|uncle|father|grandfather|boyfriend|mr\b|sir\b|남자|남성|남편|아들|형|오빠|남|소년|청년|아저씨|아버지|할아버지|남친|그는|그가|그를|그의)\b/i;
+    const female = /\b(she|her|hers|girl|woman|female|women|daughter|sister|wife|aunt|mother|grandmother|girlfriend|ms\b|mrs\b|여자|여성|아내|딸|언니|누나|여|소녀|아가씨|어머니|할머니|여친|그녀는|그녀가|그녀를|그녀의)\b/i;
+    const maleCount = (text.match(new RegExp(male.source, 'gi')) || []).length;
+    const femaleCount = (text.match(new RegExp(female.source, 'gi')) || []).length;
+    if (maleCount > femaleCount) return 'male';
+    if (femaleCount > maleCount) return 'female';
+    return null; // 감지 못하면 null
+}
+
+async function addCharFromImport(name, raw, genderHint) {
     const settings = getSettings();
     if (settings.roster.find(c => c.name === name)) { toastr.info(`${name}은 이미 등록됨`); return; }
     toastr.info(`${name} 분석 중...`);
+
+    // 텍스트 기반 사전 성별 감지
+    const detectedGender = detectGenderFromText(raw) || genderHint || 'female';
+
+    toastr.clear();
+    showLoading(null, 'analyze');
     try {
-        const parsed = await analyzeCharSheet(name, gender || 'female', raw);
-        const detectedGender = parsed.gender || gender || 'female';
+        const parsed = await analyzeCharSheet(name, detectedGender, raw);
+        hideLoading();
+        const finalGender = parsed.gender || detectedGender;
         settings.roster.push({
             id: 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            gender: detectedGender, name,
-            parsed: { ...parsed, raw }, stats: parsed.stats,
+            gender: finalGender, name,
+            parsed: { ...parsed, raw, gender: finalGender }, stats: parsed.stats,
         });
-        save(); toastr.success(`${name} 등록 완료! (${detectedGender === 'female' ? '여성' : '남성'})`);
+        save(); toastr.success(`${name} 등록 완료! (${finalGender === 'female' ? '여성' : '남성'})`);
         if (state.rosterView === 'list') renderActivePane();
-    } catch (e) { toastr.error(`${name} 분석 실패: ${e.message}`); }
+    } catch (e) { hideLoading(); toastr.error(`${name} 분석 실패: ${e.message}`); }
 }
 
 function renderAddChar(container) {
@@ -686,16 +792,25 @@ function renderCharDetail(container) {
                     <div style="width:${v}%;height:100%;background:${STAT_META[s].color}"></div>
                 </div>
             </div>`).join('');
+        const nsfw = char.parsed?.nsfw || {};
         const profileHTML = [
             ['나이', char.parsed?.age], ['직업', char.parsed?.job], ['지역', char.parsed?.location],
             ['외형', char.parsed?.appearance], ['성격', char.parsed?.personality], ['특징', char.parsed?.traits],
-            ['킨크/성향', char.parsed?.kink],
         ].map(([k, v]) =>
             `<div style="border-bottom:1px solid ${C.border};padding-bottom:10px;margin-bottom:10px">
                 <div style="font-size:9px;color:${C.textDim};margin-bottom:4px;letter-spacing:2px">${k}</div>
                 <div style="font-size:12px;color:${C.text};line-height:1.7">${esc(v || '—')}</div>
             </div>`
-        ).join('');
+        ).join('') + `
+        <div style="border:1px solid #5a3030;border-radius:2px;padding:12px;margin-top:6px;background:#1a0f0f">
+            <div style="font-size:10px;color:#c07070;font-weight:700;margin-bottom:10px;letter-spacing:1px">🔞 NSFW 정보</div>
+            ${[['신체/해부', nsfw.body], ['킨크/페티시', nsfw.kink], ['성적 스타일', nsfw.sexual_style], ['성적 취향', nsfw.preference]].map(([k, v]) =>
+                `<div style="border-bottom:1px solid #3a1f1f;padding-bottom:8px;margin-bottom:8px">
+                    <div style="font-size:9px;color:#9a6060;margin-bottom:4px;letter-spacing:1px">${k}</div>
+                    <div style="font-size:12px;color:#cc9988;line-height:1.7">${esc(v || '정보 없음')}</div>
+                </div>`
+            ).join('')}
+        </div>`;
 
         container.innerHTML = `
         <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:14px">
@@ -836,16 +951,18 @@ function renderBattleSetup(container) {
     container.querySelector('#cl-battle-start')?.addEventListener('click', async () => {
         const { selected, category, condition } = state.battleSetup;
         if (selected.length < 2) return;
-        toastr.info('배틀 시뮬 중...');
+        toastr.clear();
+        showLoading(null, 'battle');
         try {
             const resultText = await runBattlePrompt(selected, category, false);
             const m = resultText.match(/【승자[：:]\s*(.+?)】/);
             const winner = m ? m[1].trim() : selected[0].name;
             const seriousText = await runBattlePrompt(selected, category, true);
+            hideLoading();
             const session = { id: 'battle_' + Date.now(), fighters: selected.map(f => f.name), category, condition, result: winner, resultText, seriousText, createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
             const s = getSettings(); s.battleList.unshift(session); save();
             state.activeBattleId = session.id; state.battleMode = 'pokemon'; state.battleView = 'result'; renderActivePane();
-        } catch (e) { toastr.error(`배틀 실패: ${e.message}`); }
+        } catch (e) { hideLoading(); toastr.error(`배틀 실패: ${e.message}`); }
     });
 }
 
@@ -985,16 +1102,18 @@ function renderMadameSetup(container) {
     container.querySelector('#cl-madame-go')?.addEventListener('click', async () => {
         const { selected } = state.madameSetup;
         if (selected.length < 2) return;
-        toastr.info('챗씨부인이 MINE신의 부름을 받아 달력을 봅니다...');
+        toastr.clear();
+        showLoading(null, 'compat');
         try {
             const compatText = await runCompatPrompt(selected, getSettings().allowSameGender);
+            hideLoading();
             const scoreM = compatText.match(/총점[：:]\s*(\d+)/), typeM = compatText.match(/커플 유형[：:]\s*(.+)/);
             const score = scoreM ? parseInt(scoreM[1]) : Math.floor(50 + Math.random() * 50);
             const type = typeM ? typeM[1].trim() : '운명의 인연';
             const session = { id:'madame_'+Date.now(), cast:selected.map(c=>c.name), castIds:selected.map(c=>c.id), allowSame:getSettings().allowSameGender, createdAt:new Date().toLocaleDateString('ko').slice(2).replace(/\. /g,'.'), compat:{score,type,triangle:selected.length===3,poly:selected.length>3,resultText:compatText}, scenarios:null };
             const s = getSettings(); s.madameList.unshift(session); save();
             state.activeMadameId = session.id; state.madameCompatView = 'result'; renderActivePane();
-        } catch (e) { toastr.error(`궁합 분석 실패: ${e.message}`); }
+        } catch (e) { hideLoading(); toastr.error(`궁합 분석 실패: ${e.message}`); }
     });
 }
 
@@ -1068,13 +1187,15 @@ function renderMadameResult(container) {
     container.querySelector('#cl-mr-back')?.addEventListener('click', () => { state.madameCompatView='list'; renderActivePane(); });
     container.querySelectorAll('.cl-accordion-header').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('open')));
     container.querySelector('#cl-gen-scenarios')?.addEventListener('click', async () => {
-        container.querySelector('#cl-scenario-area').innerHTML = `<div style="text-align:center;padding:20px;color:${C.textDim};font-size:12px">🔮 시나리오를 엮는 중...</div>`;
+        container.querySelector('#cl-scenario-area').innerHTML = '';
+        showLoading(null, 'scenario');
         try {
             const t = await runScenarioPrompt(cast, compat.resultText);
+            hideLoading();
             session.scenarios = t; save();
             container.querySelector('#cl-scenario-area').innerHTML = renderScenarioCards(t);
             bindScenarioEvents(container);
-        } catch (e) { container.querySelector('#cl-scenario-area').innerHTML = `<div style="color:#a05050;font-size:12px">실패: ${esc(e.message)}</div>`; }
+        } catch (e) { hideLoading(); container.querySelector('#cl-scenario-area').innerHTML = `<div style="color:#a05050;font-size:12px">실패: ${esc(e.message)}</div>`; }
     });
     bindScenarioEvents(container);
 }
@@ -1167,9 +1288,11 @@ function renderMadameSim(container) {
     container.querySelector('#cl-sim-situation')?.addEventListener('input', e => state.simSetup.situation = e.target.value);
     async function doSim() {
         if (!state.simSetup.selected.length) return;
-        toastr.info('시뮬 중...');
-        try { const r = await runSimPrompt(state.simSetup.selected, state.simSetup.situation); state.simResult = r; renderMadameSim(container); }
-        catch (e) { toastr.error(`시뮬 실패: ${e.message}`); renderMadameSim(container); }
+        showLoading(null, 'sim');
+        try {
+            const r = await runSimPrompt(state.simSetup.selected, state.simSetup.situation);
+            hideLoading(); state.simResult = r; renderMadameSim(container);
+        } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); renderMadameSim(container); }
     }
     container.querySelector('#cl-sim-go')?.addEventListener('click', doSim);
     container.querySelector('#cl-sim-reroll')?.addEventListener('click', doSim);
@@ -1382,6 +1505,7 @@ function injectCSS() {
 export async function onActivate() {
     console.log(`[${MODULE_NAME}] 활성화`);
     injectCSS();
+    injectLoadingCSS();
 
     // 확장 탭 설정 UI
     const { extensionSettings } = SillyTavern.getContext();
