@@ -41,7 +41,7 @@ import { PROMPT_META, DEFAULT_PROMPTS } from './prompts.js';
 // ═══════════════════════════════════════════
 const defaultSettings = {
     roster: [], battleList: [], madameList: [], sajuList: [],
-    allowSameGender: false, selectedProfileName: null,
+    allowSameGender: false, selectedProfileName: null, fortuneProfileName: null,
     devUnlocked: false, prompts: null, maxTokens: 4000,
 };
 
@@ -469,6 +469,7 @@ function createFloatingPanel() {
             <button class="cl-tab" data-tab="roster">👤 캐릭터</button>
             <button class="cl-tab" data-tab="battle">⚔️ 배틀</button>
             <button class="cl-tab" data-tab="madame">🔮 챗씨부인</button>
+            <button class="cl-tab" data-tab="fortune">🔯 운명점</button>
             <button class="cl-tab" data-tab="settings">⚙️ 설정</button>
         </div>
         <div id="cl-madame-subtabs" style="display:none;flex-shrink:0;background:#0a0015;border-bottom:1px solid #330055">
@@ -482,6 +483,7 @@ function createFloatingPanel() {
             <div class="cl-pane" id="cl-pane-madame-compat"></div>
             <div class="cl-pane" id="cl-pane-madame-sim"></div>
             <div class="cl-pane" id="cl-pane-madame-saju"></div>
+            <div class="cl-pane" id="cl-pane-fortune"></div>
             <div class="cl-pane" id="cl-pane-settings"></div>
         </div>
     </div>`;
@@ -534,7 +536,7 @@ function toggleFloat() {
 // ═══════════════════════════════════════════
 function switchTab(tab) {
     state.currentTab = tab;
-    const tabColors = { roster: '#ff44aa', battle: '#ff2200', madame: '#cc44ff', settings: '#ffaa00' };
+    const tabColors = { roster: '#ff44aa', battle: '#ff2200', madame: '#cc44ff', fortune: '#ffcc00', settings: '#ffaa00' };
     document.querySelectorAll('#scouter-float .cl-tab').forEach(btn => {
         const isActive = btn.dataset.tab === tab;
         const color = tabColors[btn.dataset.tab] || C.accent;
@@ -545,6 +547,9 @@ function switchTab(tab) {
     });
     const subtabs = document.getElementById('cl-madame-subtabs');
     if (subtabs) subtabs.style.display = tab === 'madame' ? 'flex' : 'none';
+    // 운명점 탭은 모바일에서 드래그/리사이즈 가능
+    const panel = document.getElementById('scouter-float');
+    if (panel) panel.classList.toggle('fortune-mode', tab === 'fortune');
     renderActivePane();
 }
 function switchMadameSubtab(subtab) {
@@ -559,7 +564,7 @@ function switchMadameSubtab(subtab) {
     renderActivePane();
 }
 function renderActivePane() {
-    ['roster','battle','madame-compat','madame-sim','madame-saju','settings'].forEach(p => {
+    ['roster','battle','madame-compat','madame-sim','madame-saju','fortune','settings'].forEach(p => {
         const el = document.getElementById('cl-pane-' + p);
         if (el) el.className = 'cl-pane';
     });
@@ -571,6 +576,7 @@ function renderActivePane() {
         else if (state.currentMadameSubtab === 'sim') { const el = document.getElementById('cl-pane-madame-sim'); if (el) { el.className = 'cl-pane active'; renderMadameSim(el); } }
         else if (state.currentMadameSubtab === 'saju') { const el = document.getElementById('cl-pane-madame-saju'); if (el) { el.className = 'cl-pane active'; renderMadameSaju(el); } }
     }
+    else if (tab === 'fortune') { const el = document.getElementById('cl-pane-fortune'); if (el) { el.className = 'cl-pane active'; renderFortune(el); } }
     else if (tab === 'settings') { const el = document.getElementById('cl-pane-settings'); if (el) { el.className = 'cl-pane active'; renderSettings(el); } }
 }
 
@@ -1463,8 +1469,170 @@ async function runSajuPrompt(char) {
     return await callAI(prompt, slot.system);
 }
 
-// 설정 탭
 // ═══════════════════════════════════════════
+// 운명점 전용 AI 호출 (독립 프로필)
+// ═══════════════════════════════════════════
+async function callAIFortune(prompt, systemPrompt) {
+    const ctx = SillyTavern.getContext();
+    const settings = getSettings();
+    const profileName = settings.fortuneProfileName || settings.selectedProfileName || null;
+
+    if (profileName && ctx.ConnectionManagerRequestService) {
+        const profiles = ctx.extensionSettings?.['connectionManager']?.profiles || [];
+        const profile = profiles.find(p => p.name === profileName);
+        if (profile) {
+            const messages = systemPrompt
+                ? [{ role: 'user', content: `${systemPrompt}\n\n${prompt}` }]
+                : [{ role: 'user', content: prompt }];
+            const response = await ctx.ConnectionManagerRequestService.sendRequest(
+                profile.id, messages, settings.maxTokens || 8000,
+                { stream: false, extractData: true, includePreset: true, includeInstruct: false }
+            );
+            let raw = '';
+            if (typeof response === 'string') raw = response;
+            else if (typeof response?.content === 'string') raw = response.content;
+            else if (response?.choices?.[0]?.message?.content) raw = response.choices[0].message.content;
+            else if (response?.content?.[0]?.text) raw = response.content[0].text;
+            return filterPhoneTrigger(raw);
+        }
+    }
+    const { generateRaw } = ctx;
+    const result = await generateRaw({ systemPrompt: systemPrompt || undefined, prompt });
+    return filterPhoneTrigger(result || '');
+}
+
+async function runFortunePrompt() {
+    const ctx = SillyTavern.getContext();
+    const char = ctx.characters?.[ctx.characterId];
+    const charName = char?.name || '상대방';
+
+    const system = `당신은 챗씨부인이라는 신묘한 점쟁이입니다. MINE신의 계시를 받아 두 사람의 운명을 꿰뚫어보는 능력자.
+말투는 "~이로다", "~하느니라", "~하구나" 등 전통 점집 말투로.
+지금까지의 대화와 캐릭터 설정을 깊이 읽고 두 사람의 관계와 미래를 분석하느니라.
+좋은 것만 말하지 말고, 위기나 파국도 보이면 솔직하게 말할 것.
+마크다운 볼드(**) 사용 금지.`;
+
+    const prompt = `지금까지의 대화 내용, 캐릭터 시트, 세계관 설정을 바탕으로 두 사람(${charName}과 유저)의 운명을 풀이하라.
+
+아래 항목을 순서대로 풀이하라:
+
+🔮 【현재의 기운】
+지금 이 관계가 어느 단계인지, 두 사람 사이의 주요 긴장과 갈등 포인트 (3-4문장)
+
+💭 【숨겨진 기운】
+두 사람이 드러내지 않는 진짜 감정, 권력 구도, 숨기고 있는 것 (3-4문장)
+
+⚡ 【욕망의 기운】
+서로가 진짜 원하는 것, 잠자리 궁합과 욕망의 방향성 (3-4문장)
+
+🌪️ 【위기의 기운】
+이 관계의 최대 위기 시점, 외부 인물 개입 가능성, 배신이나 비밀 폭로 가능성 (3-4문장)
+
+🌊 【미래의 기운】
+가까운 미래 흐름, 관계를 바꿀 결정적 전환점, 누가 더 무너지는지 (3-4문장)
+
+👨‍👩‍👧 【인연의 기운】
+결혼/동거/이별 가능성, 아이는 몇 명 어떤 아이일지, 노년에 어떻게 될지 (3-5문장)
+
+✨ 【챗씨부인의 총평】
+해피엔딩/파국 가능성, 가장 극적인 결말, 챗씨부인의 한마디 (2-3문장)`;
+
+    return await callAIFortune(prompt, system);
+}
+
+// ═══════════════════════════════════════════
+// 운명점 탭 렌더링
+// ═══════════════════════════════════════════
+function renderFortune(container) {
+    const settings = getSettings();
+    const { extensionSettings } = SillyTavern.getContext();
+    const profiles = extensionSettings?.['connectionManager']?.profiles || [];
+    const fortuneProfile = settings.fortuneProfileName || '';
+    const profileOpts = profiles.map(p =>
+        `<option value="${esc(p.name)}" ${p.name === fortuneProfile ? 'selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+
+    const ctx = SillyTavern.getContext();
+    const char = ctx.characters?.[ctx.characterId];
+    const charName = char?.name || '캐릭터 없음';
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid #ffcc0066;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px" class="cl-pulse-gold">
+            <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-bottom:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
+            <div style="font-size:15px;font-weight:700;color:#ffcc00;text-shadow:0 0 10px #ffcc0088">🔯 운명점</div>
+            <div style="font-size:10px;color:#886633;margin-top:4px;font-family:'Noto Serif KR',serif">채팅을 읽고 두 사람의 운명을 점치느니라</div>
+            <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-top:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
+        </div>
+
+        ${renderDivider('전용 모델 프로필', '#ffcc00')}
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px">
+            <div style="font-size:10px;color:${C.textDim};margin-bottom:8px">다른 탭과 독립적으로 작동합니다. Pro급 모델 권장.</div>
+            <select id="cl-fortune-profile" style="width:100%;background:${C.bgDeep};border:1px solid #ffcc0066;border-radius:2px;padding:7px 10px;color:#ffcc88;font-size:12px;font-family:monospace;outline:none">
+                <option value="">기본 프로필 사용</option>
+                ${profileOpts}
+            </select>
+        </div>
+
+        ${renderDivider('현재 채팅', '#ffcc00')}
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+            <span style="font-size:22px">💬</span>
+            <div style="flex:1">
+                <div style="font-size:13px;font-weight:700;color:${C.textBright}">${esc(charName)}</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">현재 채팅방 컨텍스트 (채팅 + 로어북 + 시나리오) 자동 참조</div>
+            </div>
+        </div>
+
+        <button id="cl-fortune-go" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0088;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700;margin-bottom:16px;text-shadow:0 0 8px #ffcc0088">
+            🔯 MINE신의 계시를 받습니다
+        </button>
+
+        <div id="cl-fortune-result"></div>
+    </div>`;
+
+    container.querySelector('#cl-fortune-profile')?.addEventListener('change', e => {
+        const s = getSettings(); s.fortuneProfileName = e.target.value || null; save();
+        toastr.success(e.target.value ? `운명점 프로필: "${e.target.value}"` : '기본 프로필 사용');
+    });
+
+    container.querySelector('#cl-fortune-go')?.addEventListener('click', async () => {
+        const resultEl = container.querySelector('#cl-fortune-result');
+        resultEl.innerHTML = `<div style="text-align:center;padding:30px;color:${C.textDim};font-size:12px;font-family:'Noto Serif KR',serif">
+            챗씨부인이 MINE신을 받습니다...<br>
+            <span style="font-size:10px;color:#664433;margin-top:8px;display:block">채팅과 로어북을 읽는 중이로다...</span>
+        </div>`;
+        try {
+            const text = await runFortunePrompt();
+            resultEl.innerHTML = renderFortuneResult(text);
+            resultEl.querySelectorAll('.cl-accordion-header').forEach(h =>
+                h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
+            );
+        } catch (e) {
+            resultEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:12px">실패: ${esc(e.message)}</div>`;
+        }
+    });
+}
+
+function renderFortuneResult(text) {
+    const sections = [
+        { icon: '🔮', key: '현재의 기운',   summary: '지금 이 관계의 단계와 긴장감' },
+        { icon: '💭', key: '숨겨진 기운',   summary: '드러내지 않는 감정과 권력 구도' },
+        { icon: '⚡', key: '욕망의 기운',   summary: '서로가 진짜 원하는 것' },
+        { icon: '🌪️', key: '위기의 기운',  summary: '최대 위기와 배신 가능성' },
+        { icon: '🌊', key: '미래의 기운',   summary: '가까운 미래와 전환점' },
+        { icon: '👨‍👩‍👧', key: '인연의 기운', summary: '결혼/아이/노년' },
+        { icon: '✨', key: '챗씨부인의 총평', summary: '해피엔딩 vs 파국' },
+    ];
+    const allIcons = sections.map(s => s.icon);
+    return sections.map(s => {
+        const others = allIcons.filter(e => e !== s.icon).join('|');
+        const m = text.match(new RegExp(s.icon + '[^\\n]*【' + s.key + '】([\\s\\S]*?)(?=' + others + '|$)', 'u'));
+        const content = m ? m[1].trim() : '';
+        return renderAccordion(
+            s.icon, s.key, s.summary,
+            `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(content || '—')}</div>`
+        );
+    }).join('');
+}
 function renderSettings(container) {
     const settings = getSettings();
     const { extensionSettings } = SillyTavern.getContext();
@@ -1572,10 +1740,14 @@ function injectCSS() {
 .cl-pulse-purple { animation: cl-pulse-purple 2s ease-in-out infinite; }
 
 @media (max-width: 600px) {
-    #scouter-float {
+    #scouter-float:not(.fortune-mode) {
         width: 100vw !important; height: 100dvh !important;
         top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
         border-radius: 0 !important; resize: none !important;
+    }
+    #scouter-float.fortune-mode {
+        width: min(420px, 95vw) !important;
+        resize: both !important;
     }
     #cl-content { overflow-y: scroll !important; -webkit-overflow-scrolling: touch; }
 }
