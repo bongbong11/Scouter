@@ -120,6 +120,7 @@ async function callAI(prompt, systemPrompt) {
     const result = await generateRaw({
         systemPrompt: systemPrompt || undefined,
         prompt,
+        instructOverride: true,
         ...(connectionProfile ? { connectionProfile } : {}),
     });
     return filterPhoneTrigger(result || '');
@@ -812,7 +813,7 @@ function renderBattle(container) {
     </div>`;
 
     container.querySelectorAll('.cl-battle-card').forEach(card => card.addEventListener('click', () => {
-        state.activeBattleId = card.dataset.id; state.battleMode = 'pokemon'; state.battleView = 'result'; renderActivePane();
+        state.activeBattleId = card.dataset.id; state.battleView = 'result'; renderActivePane();
     }));
     container.querySelectorAll('.cl-battle-del').forEach(btn => btn.addEventListener('click', e => {
         e.stopPropagation();
@@ -1508,7 +1509,7 @@ export async function onActivate() {
     const savedProfile = getSettings().selectedProfileName || '';
     const profileOpts = profiles.map(p => `<option value="${esc(p.name)}" ${p.name===savedProfile?'selected':''}>${esc(p.name)}</option>`).join('');
 
-    const settingsHtml = `<div class="inline-drawer">
+    const settingsHtml = `<div class="inline-drawer" id="scouter-ext-settings">
         <div class="inline-drawer-toggle inline-drawer-header">
             <b>🔴 Scouter</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
@@ -1524,20 +1525,25 @@ export async function onActivate() {
             </div>
         </div>
     </div>`;
-    const extTarget = document.getElementById('extensions_settings2') ?? document.getElementById('extensions_settings');
-    extTarget?.insertAdjacentHTML('beforeend', settingsHtml);
-    document.getElementById('scouter-profile-select')?.addEventListener('change', e => {
-        const s = getSettings(); s.selectedProfileName = e.target.value || null; save();
-        toastr.success(e.target.value ? `"${e.target.value}" 선택됨` : '현재 연결 사용');
-    });
+    if (!document.getElementById('scouter-ext-settings')) {
+        const extTarget = document.getElementById('extensions_settings2') ?? document.getElementById('extensions_settings');
+        extTarget?.insertAdjacentHTML('beforeend', settingsHtml);
+        document.getElementById('scouter-profile-select')?.addEventListener('change', e => {
+            const s = getSettings(); s.selectedProfileName = e.target.value || null; save();
+            toastr.success(e.target.value ? `"${e.target.value}" 선택됨` : '현재 연결 사용');
+        });
+    }
 
     // extensionsMenu 버튼
-    const scouterBtnHtml = `<div id="scouter-wand-btn" title="Scouter — 챗씨부인운명상담소" style="cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:5px;font-size:13px">
-        <span>🔴</span><span style="font-size:12px">Scouter</span>
-    </div>`;
-    const toolbar = document.getElementById('extensionsMenu') ?? document.getElementById('top-bar');
-    toolbar?.insertAdjacentHTML('beforeend', scouterBtnHtml);
-    document.getElementById('scouter-wand-btn')?.addEventListener('click', toggleFloat);
+    // extensionsMenu 버튼 — 중복 방지
+    if (!document.getElementById('scouter-wand-btn')) {
+        const scouterBtnHtml = `<div id="scouter-wand-btn" title="Scouter — 챗씨부인운명상담소" style="cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:5px;font-size:13px">
+            <span>🔴</span><span style="font-size:12px">Scouter</span>
+        </div>`;
+        const toolbar = document.getElementById('extensionsMenu') ?? document.getElementById('top-bar');
+        toolbar?.insertAdjacentHTML('beforeend', scouterBtnHtml);
+        document.getElementById('scouter-wand-btn')?.addEventListener('click', toggleFloat);
+    }
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.isPanelOpen) closeFloat(); });
     console.log(`[${MODULE_NAME}] 초기화 완료`);
