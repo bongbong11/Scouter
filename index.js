@@ -109,19 +109,35 @@ function fillTpl(tpl, vars) {
 // AI 호출
 // ═══════════════════════════════════════════
 async function callAI(prompt, systemPrompt) {
-    const { generateRaw, extensionSettings } = SillyTavern.getContext();
+    const ctx = SillyTavern.getContext();
     const settings = getSettings();
     const selectedProfileName = settings.selectedProfileName || null;
-    let connectionProfile = null;
-    if (selectedProfileName) {
-        const profiles = extensionSettings?.['connectionManager']?.profiles || [];
-        connectionProfile = profiles.find(p => p.name === selectedProfileName) || null;
+
+    if (selectedProfileName && ctx.ConnectionManagerRequestService) {
+        const profiles = ctx.extensionSettings?.['connectionManager']?.profiles || [];
+        const profile = profiles.find(p => p.name === selectedProfileName);
+        if (profile) {
+            const messages = systemPrompt
+                ? [{ role: 'user', content: `${systemPrompt}\n\n${prompt}` }]
+                : [{ role: 'user', content: prompt }];
+            const response = await ctx.ConnectionManagerRequestService.sendRequest(
+                profile.id, messages, 4000,
+                { stream: false, extractData: true, includePreset: true, includeInstruct: false }
+            );
+            let raw = '';
+            if (typeof response === 'string') raw = response;
+            else if (typeof response?.content === 'string') raw = response.content;
+            else if (response?.choices?.[0]?.message?.content) raw = response.choices[0].message.content;
+            else if (response?.content?.[0]?.text) raw = response.content[0].text;
+            return filterPhoneTrigger(raw);
+        }
     }
+
+    // 프로필 없으면 현재 연결 그대로
+    const { generateRaw } = ctx;
     const result = await generateRaw({
         systemPrompt: systemPrompt || undefined,
         prompt,
-        instructOverride: true,
-        ...(connectionProfile ? { connectionProfile } : {}),
     });
     return filterPhoneTrigger(result || '');
 }
