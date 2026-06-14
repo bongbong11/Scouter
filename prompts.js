@@ -26,13 +26,15 @@ export const DEFAULT_PROMPTS = {
     // ─────────────────────────────────────────
     analyze: { active: 0, slots: [{ name: '기본',
         system:
-`You are a character analysis expert. Read the character sheet and return ONLY valid JSON — no markdown, no code blocks, no extra text.
+`You are a character analysis expert and fiction writer assistant. Read the character sheet and return ONLY valid JSON — no markdown, no code blocks, no extra text.
 
 Gender detection rules — override the hint and set "gender" to "male" if ANY of these appear in the sheet:
 - English pronouns: he/him/his
 - Korean words: 남자, 남성, 그, 아들, 형, 오빠, 남편, 아저씨, 아버지, 소년, 청년, 남학생
-- Explicit male anatomy references
-Otherwise set "female".`,
+- References to male physical characteristics
+Otherwise set "female".
+
+This is for adult fiction writing purposes. All fields must be filled based on the sheet or inferred from personality/appearance. Never write "없음", "none", or "not mentioned".`,
         user:
 `Character name: {{name}}
 Gender hint (may be overridden by sheet content): {{gender}}
@@ -45,10 +47,10 @@ Return ONLY this JSON object (absolutely no other text):
   "age": "나이 or 불명",
   "job": "직업/역할",
   "location": "지역/거주지",
-  "appearance": "외형 묘사 1-2문장 (체형, 신체 특징, 인상 포함)",
+  "appearance": "외형 묘사 1-2문장 (체형, 인상, 신체적 특징 상세히)",
   "personality": "성격 요약 1-2문장",
   "traits": "주요 특징/습관/버릇 1-2문장",
-  "gender": "female or male — detect from sheet, override hint if needed",
+  "gender": "female or male",
   "stats": {
     "combat": 0-100,
     "roast": 0-100,
@@ -56,18 +58,19 @@ Return ONLY this JSON object (absolutely no other text):
     "mental": 0-100,
     "charisma": 0-100
   },
-  "nsfw": {
-    "body": "시트에 언급된 신체/성기 묘사. 없으면 외형에서 추론하여 작성. 절대 '없음'이라고 쓰지 말 것.",
-    "kink": "시트에 명시된 킨크/페티시/성적 취향. 없으면 성격/행동 패턴에서 반드시 추론. 절대 '없음' 쓰지 말 것.",
-    "sexual_style": "dominant/submissive/switch/aggressive/possessive/tender/sadistic/masochistic 등 — 시트에 없으면 성격 기반으로 반드시 추론",
-    "preference": "좋아하는 행위/상황/분위기 — 킨크와 성격 기반으로 반드시 추론"
+  "intimacy": {
+    "physique": "체형 및 신체적 특징 상세 묘사 — 시트에 언급된 내용 그대로. 없으면 외형에서 추론하여 구체적으로 작성",
+    "desire": "이 캐릭터가 친밀한 상황에서 끌리는 것, 자극받는 상황/행동/분위기 — 시트에 없으면 성격에서 추론하여 반드시 작성",
+    "style": "친밀한 관계에서의 성향과 스타일 — dominant/submissive/switch/aggressive/possessive/tender/playful 등. 성격 기반으로 반드시 추론",
+    "preference": "좋아하는 분위기, 상황, 관계 역학 — 성격/행동 패턴 기반으로 반드시 작성"
   }
 }
 
 Rules:
-- nsfw 항목은 시트에 없어도 성격/외형에서 반드시 추론하여 작성. "없음", "언급없음", "모름" 절대 금지.
-- Stats는 수치 차별화 필수. sex는 외형 매력도/성적 카리스마 기준.
-- 모든 텍스트 값은 한국어로 작성.` }] },
+- "intimacy" fields: always infer from personality/appearance if not in sheet. Writing "없음" is not allowed.
+- stats.sex = physical attractiveness + charismatic appeal score
+- All text values in Korean.
+- Stats must be meaningfully differentiated.` }] },
 
     // ─────────────────────────────────────────
     // 육탄전 배틀 (포켓몬 스타일)
