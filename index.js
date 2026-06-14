@@ -643,7 +643,7 @@ async function importPersonas() {
         const entries = Object.entries(personas).filter(([, name]) => name && name !== '[Unnamed Persona]');
         if (!entries.length) { toastr.warning('등록된 페르소나가 없습니다'); return; }
         const list = entries.map(([file, name]) => {
-            const avatar = `/thumbnail?type=avatar&file=${encodeURIComponent(file)}`;
+            const avatar = `/thumbnail?type=persona&file=${encodeURIComponent(file)}`;
             return `<div class="cl-imp-p" data-file="${esc(file)}" data-name="${esc(name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px;display:flex;align-items:center;gap:10px">
                 <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid ${C.border};flex-shrink:0" onerror="this.style.display='none'">
                 <div>
