@@ -77,32 +77,33 @@ From the sheet above, extract the following and return ONLY this JSON (no other 
 Extract only what is in the sheet. Do not invent. If truly not mentioned, write a brief inference based on personality.` }] },
 
     // ─────────────────────────────────────────
-    // 배틀 분석
+    // 배틀 분석 (시리어스)
     // ─────────────────────────────────────────
     combat: { active: 0, slots: [{ name: '기본',
         system:
-`You are a serious combat and conflict analyst. Analyze the given characters and determine the likely outcome based on their stats, personality, and traits. Write in Korean. Be analytical, specific, and realistic.
-If a verbal/argument condition is given, focus on that angle. Otherwise analyze physical confrontation.`,
+`당신은 전문 전투/갈등 분석가입니다. 주어진 캐릭터들을 객관적으로 분석하여 결과를 예측합니다.
+절대로 포켓몬 배틀 스타일, 게임 텍스트, "기술을 사용했다", "급소에 맞았다" 같은 표현을 쓰지 마세요.
+분석적이고 현실적인 리포트 형식으로 한국어로 작성하세요.
+조건에 말다툼/언쟁이 포함되면 언변 수치 기반으로 분석하고, 없으면 전투력 기반으로 분석하세요.`,
         user:
 `조건/상황: {{condition}}
 
 참가자:
 {{fighters}}
 
-아래 순서로 분석 리포트를 작성하라:
+아래 형식의 분석 리포트를 작성하라. 절대 포켓몬 배틀 형식으로 쓰지 말 것.
 
 ⚔️ 【전력 분석】
 각 캐릭터의 강점과 약점을 수치 기반으로 분석 (각 2-3문장)
 
 🧮 【전황 시뮬레이션】
-이 상황이 실제로 벌어진다면 어떻게 전개될지 단계별로 (4-6문장)
-조건에 말다툼/언쟁이 포함되면 그 흐름도 반영할 것
+실제로 이 상황이 벌어진다면 어떻게 전개될지 단계별로 (4-6문장)
 
 ⚖️ 【변수 분석】
 승부를 뒤집을 수 있는 변수나 돌발 상황 (1-2문장)
 
 🏆 【결론】
-승자와 그 근거를 명확하게.
+승자와 근거를 명확하게.
 마지막 줄: 【최종 승자: 이름 (승률 XX%)】` }] },
 
     // ─────────────────────────────────────────
