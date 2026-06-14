@@ -61,6 +61,7 @@ let state = {
     madameSetup: { selected: [] },
     simSetup: { selected: [], situation: '' },
     simResult: null,
+    simTranslated: null,
     sajuView: 'list',   // 'list' | 'setup' | 'result'
     sajuCharId: null,
     activeSajuId: null,
@@ -148,8 +149,17 @@ async function callAI(prompt, systemPrompt) {
     return filterPhoneTrigger(result || '');
 }
 
+// generateRaw 방식 — 메인 모델+프리셋, ST 컨텍스트 없이 순수 프롬프트만
+async function callAIRaw(prompt, systemPrompt) {
+    const { generateRaw } = SillyTavern.getContext();
+    const result = await generateRaw({
+        systemPrompt: systemPrompt || undefined,
+        prompt,
+    });
+    return filterPhoneTrigger(result || '');
+}
+
 // ═══════════════════════════════════════════
-// 프롬프트 실행
 // ═══════════════════════════════════════════
 async function analyzeCharSheet(name, gender, rawSheet) {
     // 1차 호출 — 기본 정보 + stats
@@ -213,7 +223,7 @@ async function runBattlePrompt(fighters) {
 
     const { condition } = state.battleSetup;
     const condText = condition?.trim() ? `조건/상황: ${condition}` : '조건 없음 — 그냥 붙여라.';
-    return await callAI(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
+    return await callAIRaw(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
 }
 
 async function runCompatPrompt(cast, allowSame) {
@@ -260,7 +270,7 @@ async function runSimPrompt(cast, situation) {
     const castDesc = cast.map(c =>
         `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}`
     ).join('\n\n');
-    return await callAI(fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' }), slot.system);
+    return await callAIRaw(fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' }), slot.system);
 }
 
 const PROMPTS_URL = 'https://raw.githubusercontent.com/bongbong11/Scouter/main/prompts.json';
@@ -969,6 +979,7 @@ function renderBattleResult(container) {
     const session = settings.battleList.find(b => b.id === state.activeBattleId);
     if (!session) { state.battleView='list'; renderActivePane(); return; }
     const fighters = session.fighters.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
+    const displayText = session.translatedText || session.resultText || '';
 
     container.innerHTML = `
     <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
@@ -988,10 +999,28 @@ function renderBattleResult(container) {
         ${session.condition?`<div style="margin-top:8px;font-size:10px;color:${C.textDim};padding:6px 8px;background:${C.bgCard};border-radius:2px">📍 ${esc(session.condition)}</div>`:''}
     </div>
     <div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(session.resultText||'')}</div>
+        <div id="cl-battle-text" style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(displayText)}</div>
+        ${!session.translatedText ? `<button id="cl-battle-translate" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:8px;cursor:pointer;color:${C.purple};font-size:11px;font-weight:700;margin-top:8px">🌐 한국어로 번역</button>` : `<button id="cl-battle-untranslate" style="width:100%;background:none;border:1px solid ${C.border};border-radius:2px;padding:8px;cursor:pointer;color:${C.textDim};font-size:11px;margin-top:8px">원문 보기</button>`}
     </div>`;
 
     container.querySelector('#cl-br-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
+
+    container.querySelector('#cl-battle-translate')?.addEventListener('click', async () => {
+        const btn = container.querySelector('#cl-battle-translate');
+        btn.textContent = '번역 중...'; btn.disabled = true;
+        try {
+            const translated = await callAI(
+                `Translate the following Korean/English battle analysis to natural Korean. Keep section headers as-is:\n\n${session.resultText}`,
+                'You are a translator. Translate to natural Korean.'
+            );
+            session.translatedText = translated;
+            const s = getSettings(); save();
+            renderBattleResult(container);
+        } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어로 번역'; btn.disabled = false; }
+    });
+    container.querySelector('#cl-battle-untranslate')?.addEventListener('click', () => {
+        session.translatedText = null; save(); renderBattleResult(container);
+    });
 }
 
 // ═══════════════════════════════════════════
@@ -1264,8 +1293,11 @@ function renderMadameSim(container) {
         <button id="cl-sim-go" ${selected.length<1?'disabled':''} style="width:100%;background:${selected.length>=1?C.purple+'33':'#2a1e12'};border:1px solid ${selected.length>=1?C.purple:C.border};border-radius:2px;padding:9px;cursor:${selected.length>=1?'pointer':'not-allowed'};color:${selected.length>=1?C.purple:C.textDim};font-size:12px;font-weight:700">${selected.length<1?'캐릭터를 선택하세요':'🎲 시뮬 시작'}</button>
         ${state.simResult?`<div style="margin-top:16px">
             ${renderDivider('시뮬 결과', C.purple)}
-            <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap;max-height:400px;overflow-y:auto">${esc(state.simResult)}</div>
-            <button id="cl-sim-reroll" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700;margin-top:8px">🔄 다시 시뮬</button>
+            <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap;max-height:400px;overflow-y:auto">${esc(state.simTranslated || state.simResult)}</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+                <button id="cl-sim-reroll" style="flex:1;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🔄 다시 시뮬</button>
+                ${!state.simTranslated ? `<button id="cl-sim-translate" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:9px;cursor:pointer;color:${C.textDim};font-size:11px">🌐 한국어 번역</button>` : `<button id="cl-sim-untranslate" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:9px;cursor:pointer;color:${C.textDim};font-size:11px">원문</button>`}
+            </div>
         </div>`:''}
     </div>`;
 
@@ -1286,7 +1318,19 @@ function renderMadameSim(container) {
         } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); renderMadameSim(container); }
     }
     container.querySelector('#cl-sim-go')?.addEventListener('click', doSim);
-    container.querySelector('#cl-sim-reroll')?.addEventListener('click', doSim);
+    container.querySelector('#cl-sim-reroll')?.addEventListener('click', () => { state.simTranslated = null; doSim(); });
+    container.querySelector('#cl-sim-translate')?.addEventListener('click', async () => {
+        const btn = container.querySelector('#cl-sim-translate');
+        btn.textContent = '번역 중...'; btn.disabled = true;
+        try {
+            const translated = await callAI(
+                `Translate to natural Korean:\n\n${state.simResult}`,
+                'You are a translator. Translate to natural Korean.'
+            );
+            state.simTranslated = translated; renderMadameSim(container);
+        } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어 번역'; btn.disabled = false; }
+    });
+    container.querySelector('#cl-sim-untranslate')?.addEventListener('click', () => { state.simTranslated = null; renderMadameSim(container); });
 }
 
 // ═══════════════════════════════════════════
@@ -1473,31 +1517,11 @@ async function runSajuPrompt(char) {
 // 운명점 전용 AI 호출 (독립 프로필)
 // ═══════════════════════════════════════════
 async function callAIFortune(prompt, systemPrompt) {
-    const ctx = SillyTavern.getContext();
-    const settings = getSettings();
-    const profileName = settings.fortuneProfileName || settings.selectedProfileName || null;
-
-    if (profileName && ctx.ConnectionManagerRequestService) {
-        const profiles = ctx.extensionSettings?.['connectionManager']?.profiles || [];
-        const profile = profiles.find(p => p.name === profileName);
-        if (profile) {
-            const messages = systemPrompt
-                ? [{ role: 'user', content: `${systemPrompt}\n\n${prompt}` }]
-                : [{ role: 'user', content: prompt }];
-            const response = await ctx.ConnectionManagerRequestService.sendRequest(
-                profile.id, messages, settings.maxTokens || 8000,
-                { stream: false, extractData: true, includePreset: true, includeInstruct: false }
-            );
-            let raw = '';
-            if (typeof response === 'string') raw = response;
-            else if (typeof response?.content === 'string') raw = response.content;
-            else if (response?.choices?.[0]?.message?.content) raw = response.choices[0].message.content;
-            else if (response?.content?.[0]?.text) raw = response.content[0].text;
-            return filterPhoneTrigger(raw);
-        }
-    }
-    const { generateRaw } = ctx;
-    const result = await generateRaw({ systemPrompt: systemPrompt || undefined, prompt });
+    const { generateRaw } = SillyTavern.getContext();
+    const result = await generateRaw({
+        systemPrompt: systemPrompt || undefined,
+        prompt,
+    });
     return filterPhoneTrigger(result || '');
 }
 
@@ -1544,13 +1568,6 @@ Happy ending vs. tragedy probability. Most dramatic possible ending. Final one-l
 // ═══════════════════════════════════════════
 function renderFortune(container) {
     const settings = getSettings();
-    const { extensionSettings } = SillyTavern.getContext();
-    const profiles = extensionSettings?.['connectionManager']?.profiles || [];
-    const fortuneProfile = settings.fortuneProfileName || '';
-    const profileOpts = profiles.map(p =>
-        `<option value="${esc(p.name)}" ${p.name === fortuneProfile ? 'selected' : ''}>${esc(p.name)}</option>`
-    ).join('');
-
     const ctx = SillyTavern.getContext();
     const char = ctx.characters?.[ctx.characterId];
     const charName = char?.name || '캐릭터 없음';
@@ -1563,21 +1580,12 @@ function renderFortune(container) {
             <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-top:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
         </div>
 
-        ${renderDivider('전용 모델 프로필', '#ffcc00')}
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px">
-            <div style="font-size:10px;color:${C.textDim};margin-bottom:8px">다른 탭과 독립적으로 작동합니다. Pro급 모델 권장.</div>
-            <select id="cl-fortune-profile" style="width:100%;background:${C.bgDeep};border:1px solid #ffcc0066;border-radius:2px;padding:7px 10px;color:#ffcc88;font-size:12px;font-family:monospace;outline:none">
-                <option value="">기본 프로필 사용</option>
-                ${profileOpts}
-            </select>
-        </div>
-
         ${renderDivider('현재 채팅', '#ffcc00')}
         <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
             <span style="font-size:22px">💬</span>
             <div style="flex:1">
                 <div style="font-size:13px;font-weight:700;color:${C.textBright}">${esc(charName)}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">현재 채팅방 컨텍스트 (채팅 + 로어북 + 시나리오) 자동 참조</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">메인 모델+프리셋으로 현재 채팅 컨텍스트 전체 참조</div>
             </div>
         </div>
 
@@ -1595,7 +1603,6 @@ function renderFortune(container) {
     </div>`;
 
     let fortuneLang = 'ko';
-
     const btnKo = container.querySelector('#cl-fortune-lang-ko');
     const btnEn = container.querySelector('#cl-fortune-lang-en');
     function setLang(lang) {
@@ -1611,11 +1618,6 @@ function renderFortune(container) {
     }
     btnKo?.addEventListener('click', () => setLang('ko'));
     btnEn?.addEventListener('click', () => setLang('en'));
-
-    container.querySelector('#cl-fortune-profile')?.addEventListener('change', e => {
-        const s = getSettings(); s.fortuneProfileName = e.target.value || null; save();
-        toastr.success(e.target.value ? `운명점 프로필: "${e.target.value}"` : '기본 프로필 사용');
-    });
 
     container.querySelector('#cl-fortune-go')?.addEventListener('click', async () => {
         const resultEl = container.querySelector('#cl-fortune-result');
@@ -1637,7 +1639,10 @@ function renderFortune(container) {
                 const translateBtn = container.querySelector('#cl-fortune-translate');
                 translateBtn.textContent = '번역 중...'; translateBtn.disabled = true;
                 try {
-                    const translated = await callAIFortune(`Translate the following to Korean naturally:\n\n${text}`, 'You are a translator. Translate to Korean. Keep the section headers (🔮 【현재의 기운】 etc.) as-is.');
+                    const translated = await callAI(
+                        `Translate the following to Korean naturally. Keep section headers (🔮 【현재의 기운】 etc.) as-is:\n\n${text}`,
+                        'You are a translator. Translate to natural Korean. Keep emoji and section headers unchanged.'
+                    );
                     resultEl.innerHTML = renderFortuneResult(translated);
                     resultEl.querySelectorAll('.cl-accordion-header').forEach(h =>
                         h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
