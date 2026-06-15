@@ -1011,8 +1011,7 @@ function stripInfoBlocks(text) {
         .replace(/\[System[^\]]*\]/gi, '')
         .replace(/\(OOC[^)]*\)/gi, '')
         .replace(/【[^】]{1,200}】/g, '')
-        .replace(/
-{3,}/g, '\n\n')
+        .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
 
