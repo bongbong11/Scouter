@@ -1542,7 +1542,7 @@ Example: "왔어요? 뭐가 궁금해요." or "앉아요."`,
         try {
             const greetSlot = getPromptSlot('fortuneChat');
             const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '') +
-                '\n\n[개인 상담방] 맹신 유도 금지. 나쁜 쪽으로 지나치게 편향하지 말 것.';
+                '\n\n[개인 상담방] 맹신 유도 금지. 최대한 긍정적인 방향으로 이야기해줄 것.';
             const greet = await callAI(
                 `Write ONE short greeting as 챗씨부인.
 RULES:
