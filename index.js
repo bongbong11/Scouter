@@ -1409,12 +1409,25 @@ function renderFortune(container) {
     container.querySelector('#cl-froom-personal')?.addEventListener('click', () => renderFortuneNewRoom(container, 'personal'));
 }
 
-function renderFortuneNewRoom(container, type) {
+async function renderFortuneNewRoom(container, type) {
     if (type === 'couple') {
-        // 커플방 — 바로 생성 후 baseContext 로딩
         const ctx = SillyTavern.getContext();
         const char = ctx.characters?.[ctx.characterId];
-        const title = char?.name ? `${char.name} 커플 사주` : '커플 사주방';
+        const charName = char?.name || '캐릭터';
+
+        // 페르소나 이름 읽기
+        let personaName = '';
+        try {
+            const { power_user } = await import('/scripts/power-user.js');
+            const active = power_user?.active_persona;
+            if (active && power_user?.personas?.[active]) {
+                personaName = power_user.personas[active];
+            }
+        } catch(e) {}
+
+        const title = personaName
+            ? `${charName} ♥ ${personaName}`
+            : `${charName} 커플 사주`;
         const room = { id: 'froom_' + Date.now(), type: 'couple', title, baseContext: null, messages: [], createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
         const s = getSettings(); if (!s.fortuneRooms) s.fortuneRooms = []; s.fortuneRooms.unshift(room); save();
         renderFortuneChatRoom(container, room.id, true);
@@ -1797,7 +1810,7 @@ function renderFortuneCard(data, name) {
     </div>`;
 }
 
-function renderDailyFortune(container) {
+async function renderDailyFortune(container) {
     const settings = getSettings();
     const ctx = SillyTavern.getContext();
     const char = ctx.characters?.[ctx.characterId];
@@ -1808,13 +1821,14 @@ function renderDailyFortune(container) {
     let personaName = '페르소나 없음';
     let personaDesc = '';
     try {
-        const pu = (window.__power_user || {});
-        const active = pu.active_persona;
-        if (active && pu.personas?.[active]) {
-            personaName = pu.personas[active];
-            personaDesc = pu.persona_descriptions?.[active]?.description || '';
+        const { power_user } = await import('/scripts/power-user.js');
+        const active = power_user?.active_persona;
+        if (active && power_user?.personas?.[active]) {
+            personaName = power_user.personas[active];
+            const descObj = power_user?.persona_descriptions?.[active];
+            personaDesc = typeof descObj === 'string' ? descObj : (descObj?.description || '');
         }
-    } catch(e) {}
+    } catch(e) { console.warn('[챗씨부인] 페르소나 로드 실패:', e.message); }
 
     if (!container._fs) container._fs = { tab: 'char', charFortune: null, personaFortune: null };
     const fs = container._fs;
