@@ -1415,32 +1415,23 @@ async function renderFortuneNewRoom(container, type) {
         const char = ctx.characters?.[ctx.characterId];
         const charName = char?.name || '캐릭터';
 
-       // 페르소나 이름 읽기
-let personaName = '';
-let personaDesc = '';
+        // 페르소나 이름 읽기
+        let personaName = '';
+        try {
+            const { power_user } = await import('/scripts/power-user.js');
+            const active = power_user?.active_persona;
+            if (active && power_user?.personas?.[active]) {
+                personaName = power_user.personas[active];
+            }
+        } catch(e) {}
 
-try {
-    const { power_user } = await import('/scripts/power-user.js');
-
-    const active = power_user?.active_persona;
-
-    if (active) {
-        const persona = power_user?.personas?.[active];
-
-        // persona가 string / object 둘 다 대응
-        if (typeof persona === 'string') {
-            personaName = persona;
-        } else if (persona) {
-            personaName = persona?.name || '';
-        }
-
-        const descObj = power_user?.persona_descriptions?.[active];
-        personaDesc =
-            typeof descObj === 'string'
-                ? descObj
-                : (descObj?.description || '');
-    }
-} catch (e) {}
+        const title = personaName
+            ? `${charName} ♥ ${personaName}`
+            : `${charName} 커플 사주`;
+        const room = { id: 'froom_' + Date.now(), type: 'couple', title, baseContext: null, messages: [], createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
+        const s = getSettings(); if (!s.fortuneRooms) s.fortuneRooms = []; s.fortuneRooms.unshift(room); save();
+        renderFortuneChatRoom(container, room.id, true);
+    } else {
         // 개인방 — 정보 입력창
         container.innerHTML = `<div style="padding:14px">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
@@ -1498,73 +1489,35 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
     </div>`;
 
     // 커플방 baseContext 없으면 로딩
-if (room.type === 'couple' && !room.baseContext) {
-    const msgEl = container.querySelector('#cl-fc-messages');
+    if (room.type === 'couple' && !room.baseContext) {
+        const msgEl = container.querySelector('#cl-fc-messages');
 
-    function setStatus(text, sub = '') {
-        if (!msgEl) return;
-        msgEl.innerHTML = `
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;gap:12px">
-            <div style="font-size:32px;animation:scouter-spin 2s linear infinite">🔯</div>
-            <div style="font-size:13px;color:#ffcc00;font-weight:700">${text}</div>
-            ${sub ? `<div style="font-size:10px;color:#664422;line-height:1.6">${sub}</div>` : ''}
-            <div style="display:flex;gap:4px;margin-top:4px">
-                <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out infinite"></div>
-                <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
-                <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
-            </div>
-        </div>`;
-    }
-
-    // 🔥 1. 페르소나 읽기 추가
-    let personaName = '';
-    let personaDesc = '';
-
-    try {
-        const { power_user } = await import('/scripts/power-user.js');
-        const active = power_user?.active_persona;
-
-        if (active) {
-            const persona = power_user?.personas?.[active];
-
-            if (typeof persona === 'string') {
-                personaName = persona;
-            } else {
-                personaName = persona?.name || '';
-            }
-
-            const descObj = power_user?.persona_descriptions?.[active];
-            personaDesc =
-                typeof descObj === 'string'
-                    ? descObj
-                    : (descObj?.description || '');
+        function setStatus(text, sub = '') {
+            if (!msgEl) return;
+            msgEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;gap:12px">
+                <div style="font-size:32px;animation:scouter-spin 2s linear infinite">🔯</div>
+                <div style="font-size:13px;color:#ffcc00;font-weight:700">${text}</div>
+                ${sub ? `<div style="font-size:10px;color:#664422;line-height:1.6">${sub}</div>` : ''}
+                <div style="display:flex;gap:4px;margin-top:4px">
+                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out infinite"></div>
+                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
+                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
+                </div>
+            </div>`;
         }
-    } catch (e) {}
 
-    try {
-        setStatus('채팅 기록을 읽는 중...', '로어북 · 캐릭터 시트 · 대화 내용');
+        try {
+            setStatus('채팅 기록을 읽는 중...', '로어북 · 캐릭터 시트 · 대화 내용');
+            const slot = getPromptSlot('fortuneBase');
+            const baseRaw = await callAIFortune(slot.user, slot.system);
+            room.baseContext = stripInfoBlocks(baseRaw);
 
-        const slot = getPromptSlot('fortuneBase');
-
-        // 🔥 2. persona를 baseContext 생성에 포함
-        const personaBlock = personaName
-            ? `\n[USER PERSONA]\nName: ${personaName}\nDescription: ${personaDesc || '없음'}\n`
-            : '';
-
-        const baseRaw = await callAIFortune(
-            slot.user + personaBlock,
-            slot.system
-        );
-
-        room.baseContext = stripInfoBlocks(baseRaw);
-
-        setStatus('사주를 뽑는 중...', '두 사람의 일주와 오행을 계산하고 있어요');
-
-        const greetSlot = getPromptSlot('fortuneChat');
-        const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext);
-
-        const greet = await callAI(
-            `Write ONE short greeting sentence as 챗씨부인. 
+            setStatus('사주를 뽑는 중...', '두 사람의 일주와 오행을 계산하고 있어요');
+            const greetSlot = getPromptSlot('fortuneChat');
+            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext);
+            const greet = await callAI(
+                `Write ONE short greeting sentence as 챗씨부인. 
 RULES: 
 - Maximum 1-2 sentences. 
 - Do NOT analyze, explain, or reveal any information from the context.
@@ -1572,41 +1525,24 @@ RULES:
 - Just casually acknowledge the visitor arrived. Slightly bored/detached tone.
 - Korean only.
 Example: "왔어요? 뭐가 궁금해요." or "앉아요."`,
-            greetSystem
-        );
-
-        room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
-
-        const s = getSettings();
-        const target = (s.fortuneRooms || []).find(r => r.id === roomId);
-        if (target) {
-            target.baseContext = room.baseContext;
-            target.messages = room.messages;
-            save();
+                greetSystem
+            );
+            room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
+            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
+            if (target) { target.baseContext = room.baseContext; target.messages = room.messages; save(); }
+            renderFortuneChatRoom(container, roomId, false);
+        } catch (e) {
+            if (msgEl) msgEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:20px;text-align:center">로딩 실패: ${esc(e.message)}<br><button onclick="renderFortune(this.closest('#scouter-float').querySelector('.cl-pane.active'))" style="margin-top:8px;background:none;border:1px solid #664444;padding:5px 10px;cursor:pointer;color:#aa6666;font-size:11px;border-radius:2px">← 뒤로</button></div>`;
         }
-
-        renderFortuneChatRoom(container, roomId, false);
-
-    } catch (e) {
-        if (msgEl) msgEl.innerHTML = `
-        <div style="color:#a05050;font-size:12px;padding:20px;text-align:center">
-            로딩 실패: ${esc(e.message)}
-            <br>
-            <button onclick="renderFortune(this.closest('#scouter-float').querySelector('.cl-pane.active'))"
-                style="margin-top:8px;background:none;border:1px solid #664444;padding:5px 10px;cursor:pointer;color:#aa6666;font-size:11px;border-radius:2px">
-                ← 뒤로
-            </button>
-        </div>`;
+        return;
     }
 
-    return;
-}
     // 개인방 첫 인사
     if (room.type === 'personal' && room.messages.length === 0) {
         try {
             const greetSlot = getPromptSlot('fortuneChat');
             const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '') +
-                '\n\n[개인 상담방] 맹신 유도 금지. 안좋더라도 최대한 좋은 쪽으로 해석해서 설명해줄것.';
+                '\n\n[개인 상담방] 맹신 유도 금지. 나쁜 쪽으로 지나치게 편향하지 말 것.';
             const greet = await callAI(
                 `Write ONE short greeting as 챗씨부인.
 RULES:
@@ -1881,47 +1817,51 @@ async function renderDailyFortune(container) {
     const charName = char?.name || '캐릭터 없음';
     const charDesc = [char?.description, char?.personality].filter(Boolean).join('\n').slice(0, 500) || '설명 없음';
 
-// 페르소나
-let personaName = '페르소나 없음';
-let personaDesc = '';
-
-try {
-    const { power_user } = await import('/scripts/power-user.js');
-
-    const active = power_user?.active_persona;
-
-    // 1차: power_user 기반
-    if (active && power_user?.personas?.[active]) {
-        personaName = power_user.personas[active];
-
-        const descObj = power_user?.persona_descriptions?.[active];
-        personaDesc = typeof descObj === 'string'
-            ? descObj
-            : (descObj?.description || '');
-    }
-
-    // 2차 fallback: substituteParams (실제 렌더링된 persona)
-    if (!personaDesc) {
-        try {
-            const ctx = SillyTavern?.getContext?.();
-            const raw = ctx?.substituteParams?.('{{persona}}')
-                     || ctx?.substituteParams?.('{{user_persona}}')
-                     || '';
-
-            if (raw) {
-                personaDesc = raw;
-                if (personaName === '페르소나 없음') {
-                    personaName = '현재 페르소나';
-                }
-            }
-        } catch (e) {
-            // silent fallback
+    // 페르소나
+    let personaName = '페르소나 없음';
+    let personaDesc = '';
+    try {
+        const { power_user } = await import('/scripts/power-user.js');
+        const active = power_user?.active_persona;
+        if (active && power_user?.personas?.[active]) {
+            personaName = power_user.personas[active];
+            const descObj = power_user?.persona_descriptions?.[active];
+            personaDesc = typeof descObj === 'string' ? descObj : (descObj?.description || '');
         }
-    }
+    } catch(e) { console.warn('[챗씨부인] 페르소나 로드 실패:', e.message); }
 
-} catch (e) {
-    console.warn('[챗씨부인] 페르소나 로드 실패:', e.message);
-}
+    if (!container._fs) container._fs = { tab: 'char', charFortune: null, personaFortune: null };
+    const fs = container._fs;
+
+    const tabStyle = (t) => `flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:11px;font-weight:700;background:${fs.tab===t?'#ffcc0022':'none'};border:${fs.tab===t?'1px solid #ffcc0088':'1px solid #332200'};color:${fs.tab===t?'#ffcc00':'#664422'}`;
+
+    const fortune = fs.tab === 'char' ? fs.charFortune : fs.personaFortune;
+    const parsed = fortune ? parseFortune(fortune) : null;
+    const targetName = fs.tab === 'char' ? charName : personaName;
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="text-align:center;margin-bottom:14px">
+            <div style="font-size:16px;font-weight:700;color:#ffcc00">☀️ 오늘의 운세</div>
+            <div style="font-size:9px;color:#664422;margin-top:3px">⚠️ 재미로 보는 운세입니다</div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-bottom:14px">
+            <button id="cl-ftt-char" style="${tabStyle('char')}">🎭 ${esc(charName)}</button>
+            <button id="cl-ftt-persona" style="${tabStyle('persona')}">👤 ${esc(personaName)}</button>
+        </div>
+
+        ${parsed ? `
+        ${renderFortuneCard(parsed, targetName)}
+        <button id="cl-fortune-regen" style="width:100%;background:none;border:1px solid #332200;border-radius:2px;padding:8px;cursor:pointer;color:#664422;font-size:11px;margin-top:4px">🔄 다시 뽑기</button>
+        ` : `
+        <div style="text-align:center;padding:20px 0;color:#664422;font-size:11px;margin-bottom:10px">
+            MINE신에게 오늘의 운세를 물어보세요
+        </div>
+        <button id="cl-fortune-gen" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0066;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700">
+            ☀️ ${esc(targetName)}의 오늘 운세 보기
+        </button>
+        `}
+    </div>`;
 
     container.querySelector('#cl-ftt-char')?.addEventListener('click', () => { fs.tab='char'; renderDailyFortune(container); });
     container.querySelector('#cl-ftt-persona')?.addEventListener('click', () => { fs.tab='persona'; renderDailyFortune(container); });
