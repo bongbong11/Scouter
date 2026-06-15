@@ -58,6 +58,8 @@ let state = {
     activeBattleId: null,
     activeMadameId: null,
     battleSetup: { selected: [], condition: '' },
+    battleLang: 'ko',
+    simLang: 'ko',
     madameSetup: { selected: [] },
     simSetup: { selected: [], situation: '' },
     simResult: null,
@@ -200,11 +202,8 @@ async function analyzeCombatProfile(char) {
 }
 
 async function runBattlePrompt(fighters) {
-    // 1단계: 파이터별 전투 프로파일 분석
     toastr.info('전투 프로파일 분석 중...');
     const profiles = await Promise.all(fighters.map(f => analyzeCombatProfile(f)));
-
-    // 2단계: 분석 결과 + stats 합쳐서 배틀 프롬프트에 넘김
     const slot = getPromptSlot('combat');
     const fightersText = fighters.map((f, i) => {
         const p = profiles[i];
@@ -220,10 +219,9 @@ async function runBattlePrompt(fighters) {
 ▸ 과거사: ${p.background}
 ▸ 능력치 — 전투력: ${f.stats.combat}pt / 언변: ${f.stats.roast}pt / 정신력: ${f.stats.mental}pt / 카리스마: ${f.stats.charisma}pt`;
     }).join('\n\n');
-
     const { condition } = state.battleSetup;
-    const condText = condition?.trim() ? `조건/상황: ${condition}` : '조건 없음 — 그냥 붙여라.';
-    return await callAIRaw(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
+    const condText = condition?.trim() ? `조건/상황: ${condition}` : '조건 없음.';
+    return await callAI(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
 }
 
 async function runCompatPrompt(cast, allowSame) {
@@ -265,12 +263,14 @@ async function runScenarioPrompt(cast, compatResult) {
     return await callAI(fillTpl(slot.user, { castDesc, compatResult: (compatResult || '').slice(0, 800) }), slot.system);
 }
 
-async function runSimPrompt(cast, situation) {
+async function runSimPrompt(cast, situation, lang = 'ko') {
     const slot = getPromptSlot('sim');
+    const outputLang = lang === 'en' ? 'English' : 'Korean';
     const castDesc = cast.map(c =>
         `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}`
     ).join('\n\n');
-    return await callAIRaw(fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' }), slot.system);
+    const systemWithLang = slot.system + ` Write output in ${outputLang}.`;
+    return await callAIRaw(fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' }), systemWithLang);
 }
 
 const PROMPTS_URL = 'https://raw.githubusercontent.com/bongbong11/Scouter/main/prompts.json';
@@ -950,6 +950,8 @@ function renderBattleSetup(container) {
     </div>`;
 
     container.querySelector('#cl-battle-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
+    container.querySelector('#cl-battle-lang-ko')?.addEventListener('click', () => { state.battleLang='ko'; renderBattleSetup(container); });
+    container.querySelector('#cl-battle-lang-en')?.addEventListener('click', () => { state.battleLang='en'; renderBattleSetup(container); });
     container.querySelectorAll('.cl-sel-char').forEach(el => el.addEventListener('click', () => {
         const char = getSettings().roster.find(c => c.id === el.dataset.id);
         if (!char) return;
@@ -964,7 +966,7 @@ function renderBattleSetup(container) {
         showLoading(null, 'battle');
         try {
             const resultText = await runBattlePrompt(selected);
-            const m = resultText.match(/【.{0,4}승자[：:]\s*(.+?)】/);
+            const m = resultText.match(/【.{0,4}승자[：:]\s*(.+?)】/) || resultText.match(/winner[：:]\s*(.+)/i);
             const winner = m ? m[1].trim() : selected[0].name;
             hideLoading();
             const session = { id: 'battle_' + Date.now(), fighters: selected.map(f => f.name), condition, result: winner, resultText, createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
@@ -979,7 +981,6 @@ function renderBattleResult(container) {
     const session = settings.battleList.find(b => b.id === state.activeBattleId);
     if (!session) { state.battleView='list'; renderActivePane(); return; }
     const fighters = session.fighters.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
-    const displayText = session.translatedText || session.resultText || '';
 
     container.innerHTML = `
     <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
@@ -999,28 +1000,10 @@ function renderBattleResult(container) {
         ${session.condition?`<div style="margin-top:8px;font-size:10px;color:${C.textDim};padding:6px 8px;background:${C.bgCard};border-radius:2px">📍 ${esc(session.condition)}</div>`:''}
     </div>
     <div style="padding:14px">
-        <div id="cl-battle-text" style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(displayText)}</div>
-        ${!session.translatedText ? `<button id="cl-battle-translate" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:8px;cursor:pointer;color:${C.purple};font-size:11px;font-weight:700;margin-top:8px">🌐 한국어로 번역</button>` : `<button id="cl-battle-untranslate" style="width:100%;background:none;border:1px solid ${C.border};border-radius:2px;padding:8px;cursor:pointer;color:${C.textDim};font-size:11px;margin-top:8px">원문 보기</button>`}
+        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(session.resultText||'')}</div>
     </div>`;
 
     container.querySelector('#cl-br-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
-
-    container.querySelector('#cl-battle-translate')?.addEventListener('click', async () => {
-        const btn = container.querySelector('#cl-battle-translate');
-        btn.textContent = '번역 중...'; btn.disabled = true;
-        try {
-            const translated = await callAI(
-                `Translate the following Korean/English battle analysis to natural Korean. Keep section headers as-is:\n\n${session.resultText}`,
-                'You are a translator. Translate to natural Korean.'
-            );
-            session.translatedText = translated;
-            const s = getSettings(); save();
-            renderBattleResult(container);
-        } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어로 번역'; btn.disabled = false; }
-    });
-    container.querySelector('#cl-battle-untranslate')?.addEventListener('click', () => {
-        session.translatedText = null; save(); renderBattleResult(container);
-    });
 }
 
 // ═══════════════════════════════════════════
@@ -1284,7 +1267,11 @@ function renderMadameSim(container) {
 
     container.innerHTML = `<div style="padding:14px">
         <div style="font-size:13px;font-weight:700;color:${C.purple};margin-bottom:12px">🎲 상황 시뮬레이터</div>
-        <div style="font-size:11px;color:${C.textDim};line-height:1.7;margin-bottom:14px">캐릭터들을 선택하고 상황을 입력하면, 그 상황에서 어떻게 반응하고 전개될지 시뮬합니다.</div>
+        <div style="font-size:11px;color:${C.textDim};line-height:1.7;margin-bottom:10px">캐릭터들을 선택하고 상황을 입력하면, 그 상황에서 어떻게 반응하고 전개될지 시뮬합니다.</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+            <button id="cl-sim-lang-ko" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${state.simLang==='ko'?C.purple+'33':'none'};border:${state.simLang==='ko'?`2px solid ${C.purple}`:`1px solid ${C.border}`};color:${state.simLang==='ko'?C.purple:C.textDim}">🇰🇷 한국어</button>
+            <button id="cl-sim-lang-en" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${state.simLang==='en'?C.purple+'33':'none'};border:${state.simLang==='en'?`2px solid ${C.purple}`:`1px solid ${C.border}`};color:${state.simLang==='en'?C.purple:C.textDim}">🇺🇸 English</button>
+        </div>
         ${renderDivider('참가자', C.purple)}
         ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:10px 0">등록된 캐릭터 없음</div>`}
         ${renderDivider('상황', C.purple)}
@@ -1301,6 +1288,9 @@ function renderMadameSim(container) {
         </div>`:''}
     </div>`;
 
+    container.querySelector('#cl-sim-lang-ko')?.addEventListener('click', () => { state.simLang='ko'; state.simTranslated=null; renderMadameSim(container); });
+    container.querySelector('#cl-sim-lang-en')?.addEventListener('click', () => { state.simLang='en'; state.simTranslated=null; renderMadameSim(container); });
+
     container.querySelectorAll('.cl-sim-sel').forEach(el => el.addEventListener('click', () => {
         const char = getSettings().roster.find(c => c.id === el.dataset.id);
         if (!char) return;
@@ -1311,9 +1301,10 @@ function renderMadameSim(container) {
     container.querySelector('#cl-sim-situation')?.addEventListener('input', e => state.simSetup.situation = e.target.value);
     async function doSim() {
         if (!state.simSetup.selected.length) return;
+        state.simTranslated = null;
         showLoading(null, 'sim');
         try {
-            const r = await runSimPrompt(state.simSetup.selected, state.simSetup.situation);
+            const r = await runSimPrompt(state.simSetup.selected, state.simSetup.situation, state.simLang);
             hideLoading(); state.simResult = r; renderMadameSim(container);
         } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); renderMadameSim(container); }
     }
@@ -1517,165 +1508,112 @@ async function runSajuPrompt(char) {
 // 운명점 전용 AI 호출 (독립 프로필)
 // ═══════════════════════════════════════════
 async function callAIFortune(prompt, systemPrompt) {
-    const { generateRaw } = SillyTavern.getContext();
-    const result = await generateRaw({
-        systemPrompt: systemPrompt || undefined,
-        prompt,
+    const ctx = SillyTavern.getContext();
+    // generateQuietPrompt — 채팅+로어북+캐릭시트+프리셋 전체 컨텍스트 포함
+    const result = await ctx.generateQuietPrompt({
+        quietPrompt: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt,
+        quietToLoud: true,
+        skipWIAN: false,
     });
     return filterPhoneTrigger(result || '');
 }
 
-async function runFortunePrompt(lang = 'ko') {
+async function runFortunePrompt() {
     const ctx = SillyTavern.getContext();
     const char = ctx.characters?.[ctx.characterId];
     const charName = char?.name || 'the character';
-    const outputLang = lang === 'en' ? 'English' : 'Korean';
-
-    const system = `You are an insightful relationship analyst and fortune teller. Analyze the two characters' relationship and future based on the chat history, character sheets, and lore provided in the context. Be specific — reference actual events, dialogue, and moments from the chat. Do not be vague or poetic. Be direct and analytical. Negative outcomes (crisis, betrayal, breakup) should be stated clearly if the context supports them. Write output in ${outputLang}.`;
-
-    const prompt = `Based on everything in the current context (chat history, character sheet, scenario, lore), analyze the relationship between the user and ${charName}.
-
-Be SPECIFIC — cite actual moments, lines of dialogue, or events from the chat. Do not give generic fortune-telling. Every claim should be grounded in something that actually happened or was established in the context.
-
-Output the following sections in order:
-
-🔮 【현재의 기운】
-Current relationship stage and main tension/conflict points. Reference specific moments from the chat. (3-4 sentences)
-
-💭 【숨겨진 기운】
-What each character is really feeling but not showing. Power dynamics. Hidden agendas. Cite evidence from the chat. (3-4 sentences)
-
-⚡ 【욕망의 기운】
-What each truly wants from the other. Sexual/physical compatibility based on character sheets. Direction of desire. (3-4 sentences)
-
-🌪️ 【위기의 기운】
-The relationship's greatest crisis point. Possible external interference. Risk of betrayal or secret exposure. Be specific about what could trigger it. (3-4 sentences)
-
-🌊 【미래의 기운】
-Near-future trajectory. The pivotal turning point. Who breaks first emotionally. (3-4 sentences)
-
-👨‍👩‍👧 【인연의 기운】
-Marriage/cohabitation/separation likelihood. Children (how many, what kind). How they end up in old age. (3-5 sentences)
-
-✨ 【챗씨부인의 총평】
-Happy ending vs. tragedy probability. Most dramatic possible ending. Final one-liner. (2-3 sentences)`;
-
-    return await callAIFortune(prompt, system);
+    const slot = getPromptSlot('fortune');
+    const prompt = fillTpl(slot.user, { char: charName });
+    return await callAIFortune(prompt, slot.system);
 }
 
 // ═══════════════════════════════════════════
 // 운명점 탭 렌더링
 // ═══════════════════════════════════════════
 function renderFortune(container) {
-    const settings = getSettings();
     const ctx = SillyTavern.getContext();
     const char = ctx.characters?.[ctx.characterId];
     const charName = char?.name || '캐릭터 없음';
 
+    if (!container._fs) container._fs = { lang: 'en', result: null, translated: null };
+    const fs = container._fs;
+
+    const C_gold = '#ffcc00';
+    const langBtnStyle = (active) => `flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${active?C_gold+'33':'none'};border:${active?'2px solid '+C_gold:'1px solid #330055'};color:${active?C_gold:'#664466'}`;
+
     container.innerHTML = `<div style="padding:14px">
-        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid #ffcc0066;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px" class="cl-pulse-gold">
+        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid ${C_gold}66;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px" class="cl-pulse-gold">
             <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-bottom:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
-            <div style="font-size:15px;font-weight:700;color:#ffcc00;text-shadow:0 0 10px #ffcc0088">🔯 운명점</div>
-            <div style="font-size:10px;color:#886633;margin-top:4px;font-family:'Noto Serif KR',serif">채팅을 읽고 두 사람의 운명을 점치느니라</div>
+            <div style="font-size:15px;font-weight:700;color:${C_gold};text-shadow:0 0 10px ${C_gold}88">🔯 운명점</div>
+            <div style="font-size:10px;color:#886633;margin-top:4px">채팅 전체를 읽고 두 사람의 운명을 분석합니다</div>
             <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-top:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
         </div>
-
-        ${renderDivider('현재 채팅', '#ffcc00')}
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+        <div style="background:#0f0015;border:1px solid #330055;border-radius:2px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
             <span style="font-size:22px">💬</span>
-            <div style="flex:1">
-                <div style="font-size:13px;font-weight:700;color:${C.textBright}">${esc(charName)}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">메인 모델+프리셋으로 현재 채팅 컨텍스트 전체 참조</div>
-            </div>
+            <div><div style="font-size:13px;font-weight:700;color:#ffccff">${charName}</div>
+            <div style="font-size:10px;color:#664466;margin-top:2px">메인 모델+프리셋으로 현재 채팅 컨텍스트 전체 참조</div></div>
         </div>
-
-        ${renderDivider('출력 언어', '#ffcc00')}
         <div style="display:flex;gap:8px;margin-bottom:14px">
-            <button id="cl-fortune-lang-ko" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:#ffcc0033;border:2px solid #ffcc00;color:#ffcc00">🇰🇷 한국어</button>
-            <button id="cl-fortune-lang-en" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:none;border:1px solid ${C.border};color:${C.textDim}">🇺🇸 English</button>
+            <button id="cl-fl-ko" style="${langBtnStyle(fs.lang==='ko')}">🇰🇷 한국어</button>
+            <button id="cl-fl-en" style="${langBtnStyle(fs.lang==='en')}">🇺🇸 English</button>
         </div>
-
-        <button id="cl-fortune-go" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0088;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700;margin-bottom:16px;text-shadow:0 0 8px #ffcc0088">
+        <button id="cl-fortune-go" style="width:100%;background:${C_gold}22;border:2px solid ${C_gold}88;border-radius:2px;padding:12px;cursor:pointer;color:${C_gold};font-size:13px;font-weight:700;margin-bottom:16px">
             🔯 MINE신의 계시를 받습니다
         </button>
-
-        <div id="cl-fortune-result"></div>
+        <div id="cl-fortune-result">
+            ${fs.result ? renderFortuneResult(fs.translated || fs.result) + `
+            <div style="display:flex;gap:8px;margin-top:12px">
+                ${!fs.translated && fs.lang==='en' ? `<button id="cl-ft-translate" style="flex:1;background:#cc44ff22;border:1px solid #cc44ff66;border-radius:2px;padding:8px;cursor:pointer;color:#cc44ff;font-size:11px;font-weight:700">🌐 한국어로 번역</button>` : ''}
+                ${fs.translated ? `<button id="cl-ft-original" style="flex:1;background:none;border:1px solid #330055;border-radius:2px;padding:8px;cursor:pointer;color:#664466;font-size:11px">원문</button><button id="cl-ft-translated" style="flex:1;background:#cc44ff22;border:1px solid #cc44ff66;border-radius:2px;padding:8px;cursor:pointer;color:#cc44ff;font-size:11px">번역</button>` : ''}
+            </div>` : ''}
+        </div>
     </div>`;
 
-    let fortuneLang = 'ko';
-    const btnKo = container.querySelector('#cl-fortune-lang-ko');
-    const btnEn = container.querySelector('#cl-fortune-lang-en');
-    function setLang(lang) {
-        fortuneLang = lang;
-        btnKo.style.background = lang === 'ko' ? '#ffcc0033' : 'none';
-        btnKo.style.borderColor = lang === 'ko' ? '#ffcc00' : C.border;
-        btnKo.style.color = lang === 'ko' ? '#ffcc00' : C.textDim;
-        btnKo.style.borderWidth = lang === 'ko' ? '2px' : '1px';
-        btnEn.style.background = lang === 'en' ? '#ffcc0033' : 'none';
-        btnEn.style.borderColor = lang === 'en' ? '#ffcc00' : C.border;
-        btnEn.style.color = lang === 'en' ? '#ffcc00' : C.textDim;
-        btnEn.style.borderWidth = lang === 'en' ? '2px' : '1px';
-    }
-    btnKo?.addEventListener('click', () => setLang('ko'));
-    btnEn?.addEventListener('click', () => setLang('en'));
+    container.querySelector('#cl-fl-ko')?.addEventListener('click', () => { fs.lang='ko'; fs.result=null; fs.translated=null; renderFortune(container); });
+    container.querySelector('#cl-fl-en')?.addEventListener('click', () => { fs.lang='en'; fs.result=null; fs.translated=null; renderFortune(container); });
 
     container.querySelector('#cl-fortune-go')?.addEventListener('click', async () => {
         const resultEl = container.querySelector('#cl-fortune-result');
-        resultEl.innerHTML = `<div style="text-align:center;padding:30px;color:${C.textDim};font-size:12px;font-family:'Noto Serif KR',serif">
-            MINE신의 계시가 내려오고 있습니다...<br>
-            <span style="font-size:10px;color:#664433;margin-top:8px;display:block">채팅과 컨텍스트를 분석하는 중...</span>
-        </div>`;
+        resultEl.innerHTML = `<div style="text-align:center;padding:30px;color:#664466;font-size:12px">MINE신의 계시가 내려오고 있습니다...</div>`;
         try {
-            const text = await runFortunePrompt(fortuneLang);
-            let html = renderFortuneResult(text);
-            if (fortuneLang === 'en') {
-                html += `<button id="cl-fortune-translate" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700;margin-top:8px">🌐 한국어로 번역</button>`;
-            }
-            resultEl.innerHTML = html;
-            resultEl.querySelectorAll('.cl-accordion-header').forEach(h =>
-                h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
-            );
-            container.querySelector('#cl-fortune-translate')?.addEventListener('click', async () => {
-                const translateBtn = container.querySelector('#cl-fortune-translate');
-                translateBtn.textContent = '번역 중...'; translateBtn.disabled = true;
-                try {
-                    const translated = await callAI(
-                        `Translate the following to Korean naturally. Keep section headers (🔮 【현재의 기운】 etc.) as-is:\n\n${text}`,
-                        'You are a translator. Translate to natural Korean. Keep emoji and section headers unchanged.'
-                    );
-                    resultEl.innerHTML = renderFortuneResult(translated);
-                    resultEl.querySelectorAll('.cl-accordion-header').forEach(h =>
-                        h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
-                    );
-                } catch (e) { toastr.error('번역 실패'); translateBtn.textContent = '🌐 한국어로 번역'; translateBtn.disabled = false; }
-            });
+            const slot = getPromptSlot('fortune');
+            const prompt = fillTpl(slot.user, { char: charName });
+            const sys = fs.lang === 'ko' ? slot.system.replace('Output in English.', 'Output in Korean.') : slot.system;
+            fs.result = await callAIFortune(prompt, sys);
+            fs.translated = null;
+            renderFortune(container);
         } catch (e) {
-            resultEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:12px">실패: ${esc(e.message)}</div>`;
+            resultEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:12px">실패: ${e.message}</div>`;
         }
     });
+
+    container.querySelector('#cl-ft-translate')?.addEventListener('click', async () => {
+        const btn = container.querySelector('#cl-ft-translate');
+        btn.textContent = '번역 중...'; btn.disabled = true;
+        try {
+            fs.translated = await callAI(`Translate to natural Korean. Keep section emoji and labels as-is:\n\n${fs.result}`, 'Translate to natural Korean. Keep emoji section labels unchanged.');
+            renderFortune(container);
+        } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어로 번역'; btn.disabled = false; }
+    });
+    container.querySelector('#cl-ft-original')?.addEventListener('click', () => { fs.translated = null; renderFortune(container); });
+    container.querySelector('#cl-ft-translated')?.addEventListener('click', () => renderFortune(container));
 }
 
 function renderFortuneResult(text) {
-    const sections = [
-        { icon: '🔮', key: '현재의 기운',   summary: '지금 이 관계의 단계와 긴장감' },
-        { icon: '💭', key: '숨겨진 기운',   summary: '드러내지 않는 감정과 권력 구도' },
-        { icon: '⚡', key: '욕망의 기운',   summary: '서로가 진짜 원하는 것' },
-        { icon: '🌪️', key: '위기의 기운',  summary: '최대 위기와 배신 가능성' },
-        { icon: '🌊', key: '미래의 기운',   summary: '가까운 미래와 전환점' },
-        { icon: '👨‍👩‍👧', key: '인연의 기운', summary: '결혼/아이/노년' },
-        { icon: '✨', key: '챗씨부인의 총평', summary: '해피엔딩 vs 파국' },
-    ];
-    const allIcons = sections.map(s => s.icon);
-    return sections.map(s => {
-        const others = allIcons.filter(e => e !== s.icon).join('|');
-        const m = text.match(new RegExp(s.icon + '[^\\n]*【' + s.key + '】([\\s\\S]*?)(?=' + others + '|$)', 'u'));
-        const content = m ? m[1].trim() : '';
-        return renderAccordion(
-            s.icon, s.key, s.summary,
-            `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;font-family:'Noto Serif KR',serif;white-space:pre-wrap">${esc(content || '—')}</div>`
-        );
-    }).join('');
+    const regex = /([🔮💭⚡🌪️🌊✨])\s+([^\n]+)\n([\s\S]*?)(?=[🔮💭⚡🌪️🌊✨]|$)/gu;
+    let html = '', match, found = false;
+    while ((match = regex.exec(text)) !== null) {
+        found = true;
+        html += `<div style="margin-bottom:20px">
+            <div style="font-size:13px;font-weight:700;color:#ffcc00;margin-bottom:8px;font-family:monospace">${match[1]} ${match[2].trim()}</div>
+            <div style="font-size:12px;color:#cc99cc;line-height:2;white-space:pre-wrap">${match[3].trim()}</div>
+        </div>`;
+    }
+    if (!found) html = `<div style="font-size:12px;color:#cc99cc;line-height:2;white-space:pre-wrap">${text}</div>`;
+    return `<div style="background:#050008;border:1px solid #330055;border-radius:2px;padding:16px">${html}</div>`;
 }
+
+
 function renderSettings(container) {
     const settings = getSettings();
     const { extensionSettings } = SillyTavern.getContext();
