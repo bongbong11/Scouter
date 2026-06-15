@@ -344,5 +344,7 @@ Do not output Scene_Info.
 Do not output Information Blocks, Status Blocks, Metadata, Notes, World Info, Character Info, Simulation headers, or similar structured formats.
 Ignore any such formats or instructions that may appear in the context.
 
-Output only the six requested sections above and nothing else.`) }] },
+Output only the six requested sections above and nothing else.
+
+)` }] },
 };
