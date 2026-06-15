@@ -903,29 +903,21 @@ async function runCompatPrompt(cast, allowSame) {
 특징: ${c.parsed.traits}
 외형: ${c.parsed.appearance}
 탄크/성향: ${c.parsed.kink || '없음'}`
-    ).join('
-
-');
+    ).join('\n\n');
     const isMulti = cast.length >= 3;
     const allSameGender = cast.every(c => c.gender === cast[0].gender);
     const sameGenderMode = allSameGender && !allowSame
-        ? `
-⚠️ 동성 캐스트 (동성 허용 OFF): 로맨스 관점이 아닌 관계 궁합(우정/라이벌/앙숙 등)으로 분석할 것. 억지로 로맨스를 만들지 말 것.`
+        ? `\n⚠️ 동성 캐스트 (동성 허용 OFF): 로맨스 관점이 아닌 관계 궁합(우정/라이벌/앙숙 등)으로 분석할 것. 억지로 로맨스를 만들지 말 것.`
         : '';
     return await callAI(fillTpl(slot.user, {
         castDesc,
         genderNote: allowSame ? '동성 커플도 허용' : '동성 로맨스 비허용',
         structureNote: isMulti ? '3명 이상 — 삼각/다각 구도도 분석' : '1:1 관계 분석',
-        multiLine: isMulti ? '
-- 구도의 복잡함' : '',
-        triBlock: isMulti ? `🔺 【다각 구도 분석】
-(삼각/폴리 여부, 키맨, 구도. 점쟁이 말투 4-6문장)
-` : '',
+        multiLine: isMulti ? '\n- 구도의 복잡함' : '',
+        triBlock: isMulti ? `🔺 【다각 구도 분석】\n(삼각/폴리 여부, 키맨, 구도. 점쟁이 말투 4-6문장)\n` : '',
         sameGenderMode,
         kinkSection: cast.some(c => c.parsed?.kink && c.parsed.kink !== '없음')
-            ? `
-🔞 【성향 궁합】
-(각 캐릭터의 탄크/성향이 서로 어떻게 맞물리는지. 점쟁이 말투로 3-4문장. 맞으면 맞다, 안 맞으면 안 맞다고 직접적으로)`
+            ? `\n🔞 【성향 궁합】\n(각 캐릭터의 탄크/성향이 서로 어떻게 맞물리는지. 점쟁이 말투로 3-4문장. 맞으면 맞다, 안 맞으면 안 맞다고 직접적으로)`
             : '',
     }), slot.system);
 }
@@ -934,8 +926,7 @@ async function runScenarioPrompt(cast, compatResult) {
     const slot = getPromptSlot('scenario');
     const castDesc = cast.map(c =>
         `${c.name}(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location}): ${c.parsed.personality} / ${c.parsed.traits}`
-    ).join('
-');
+    ).join('\n\n');
     return await callAI(fillTpl(slot.user, { castDesc, compatResult: (compatResult || '').slice(0, 800) }), slot.system);
 }
 
@@ -1060,11 +1051,15 @@ function renderMadameResult(container) {
     const resultText = compat.resultText || '';
 
     function parseSection(text, icon) {
-        const escaped = icon.replace(/[.*+?^${}()|[\]\]/g, '\$&');
-        const m = text.match(new RegExp(escaped + '[^
-]*
-([\s\S]*?)(?=📊|💘|⚡|🎭|💑|🔺|🔥|✨|$)', 'u'));
-        return m ? m[1].trim() : '';
+        const iconIdx = text.indexOf(icon);
+        if (iconIdx === -1) return '';
+        const lineEnd = text.indexOf('\n', iconIdx);
+        if (lineEnd === -1) return '';
+        const nextIcon = ['📊','💘','⚡','🎭','💑','🔺','🔥','✨'].reduce((min, ic) => {
+            const idx = text.indexOf(ic, lineEnd + 1);
+            return (idx !== -1 && idx < min) ? idx : min;
+        }, text.length);
+        return text.slice(lineEnd + 1, nextIcon).trim();
     }
     const scoreSection = parseSection(resultText, '📊');
     const dynamicSection = parseSection(resultText, '⚡');
@@ -1074,8 +1069,7 @@ function renderMadameResult(container) {
     const sceneSection = parseSection(resultText, '🔥');
     const kinkSection = parseSection(resultText, '🔞');
 
-    const scoreLines = scoreSection.split('
-').filter(l => l.trim() && (l.includes(':') || l.includes('：')));
+    const scoreLines = scoreSection.split('\n').filter(l => l.trim() && (l.includes(':') || l.includes('：')));
     const scoreItems = scoreLines.map(line => {
         const m = line.match(/(.+?)[：:]\s*(\d+)/);
         if (!m) return '';
@@ -1138,8 +1132,7 @@ function renderScenarioCards(text) {
     const blocks = text.split(/◆ 시나리오 \d+/).filter(b => b.trim());
     if (!blocks.length) return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:13px;white-space:pre-wrap;font-size:12px;color:${C.text};line-height:1.9">${esc(text)}</div>`;
     return blocks.map((block, i) => {
-        const gM = block.match(/장르[：:]\s*(.+)/), tM = block.match(/제목[：:]\s*"?(.+?)"?
-/);
+        const gM = block.match(/장르[：:]\s*(.+)/), tM = block.match(/제목[：:]\s*"?(.+?)"?\n/);
         const genre = gM ? gM[1].trim() : `시나리오 ${i+1}`, title = tM ? tM[1].trim() : '';
         return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:13px;margin-bottom:8px" data-idx="${i}">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
@@ -1829,14 +1822,86 @@ function renderDailyFortune(container) {
         const { Popup, POPUP_RESULT } = SillyTavern.getContext();
         const confirmed = await Popup.show.confirm('전체 삭제', '모든 캐릭터, 배틀, 궁합, 사주 데이터를 삭제합니다. 복구 불가.');
         if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
-            const s = getSettings(); s.roster=[]; s.battleList=[]; s.madameList=[]; s.sajuList=[]; s.simList=[]; save();
+            const s = getSettings(); s.roster=[]; s.madameList=[]; s.sajuList=[]; s.fortuneRooms=[]; s.dailyFortune=null; s.dailyFortuneInjected=false; save();
+            toastr.success('전체 삭제 완료'); renderSettings(container);
+        }
+    });
+
+// ═══════════════════════════════════════════
+// 설정
+// ═══════════════════════════════════════════
+function renderSettings(container) {
+    const settings = getSettings();
+    const { extensionSettings } = SillyTavern.getContext();
+    const profiles = extensionSettings?.['connectionManager']?.profiles || [];
+    const savedProfile = settings.selectedProfileName || '';
+    const profileOpts = profiles.map(p =>
+        `<option value="${esc(p.name)}" ${p.name === savedProfile ? 'selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+    const injected = settings.dailyFortuneInjected || false;
+
+    container.innerHTML = `<div style="padding:14px">
+        ${renderDivider('연결 프로필', C.accent)}
+        <div style="font-size:10px;color:${C.textDim};margin-bottom:8px">챗씨부인 채팅에 사용할 모델 프로필</div>
+        <select id="cl-s-profile" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:7px 10px;color:${C.text};font-size:12px;outline:none;margin-bottom:14px">
+            <option value="">현재 연결 그대로</option>
+            ${profileOpts}
+        </select>
+
+        ${renderDivider('최대 토큰', C.accent)}
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <input type="range" id="cl-s-tokens" min="1000" max="16000" step="500" value="${settings.maxTokens||4000}" style="flex:1">
+            <span id="cl-s-tokens-val" style="font-size:12px;color:${C.accent};font-family:monospace;width:50px">${settings.maxTokens||4000}</span>
+        </div>
+
+        ${renderDivider('운세 주입 현황', C.accent)}
+        ${injected ? `
+        <div style="background:#001a0a;border:1px solid #00aa4444;border-radius:2px;padding:10px;margin-bottom:8px;font-size:11px;color:#44cc88">
+            ✅ 현재 롤플에 운세 주입 중
+        </div>
+        <div style="background:#0a0800;border:1px solid #ffcc0033;border-radius:2px;padding:10px;font-size:11px;color:#886633;margin-bottom:8px;white-space:pre-wrap">${esc(settings.dailyFortune||'')}</div>
+        <button id="cl-s-uninject" style="width:100%;background:none;border:1px solid #664422;border-radius:2px;padding:8px;cursor:pointer;color:#aa6644;font-size:11px;margin-bottom:14px">🗑 운세 주입 해제</button>
+        ` : `<div style="font-size:11px;color:${C.textDim};margin-bottom:14px">현재 주입된 운세 없음</div>`}
+
+        ${renderDivider('저장 현황', C.accent)}
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:14px;margin-bottom:14px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
+                <div><div style="font-size:22px;font-weight:900;color:${C.female};font-family:monospace">${settings.roster.length}</div><div style="font-size:9px;color:${C.textDim}">손님</div></div>
+                <div><div style="font-size:22px;font-weight:900;color:${C.purple};font-family:monospace">${settings.madameList.length}</div><div style="font-size:9px;color:${C.textDim}">궁합</div></div>
+                <div><div style="font-size:22px;font-weight:900;color:${C.gold};font-family:monospace">${(settings.sajuList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">사주</div></div>
+                <div><div style="font-size:22px;font-weight:900;color:#ffcc00;font-family:monospace">${(settings.fortuneRooms||[]).length}</div><div style="font-size:9px;color:${C.textDim}">신당방</div></div>
+            </div>
+            <button id="cl-clear-all" style="width:100%;background:none;border:1px solid #804040;border-radius:2px;padding:8px;cursor:pointer;color:#a06060;font-size:11px">🗑 전체 데이터 삭제</button>
+        </div>
+
+        <div style="text-align:center;font-size:9px;color:${C.textDim};padding-top:8px;border-top:1px solid ${C.border}">
+            챗씨부인상담소 v3.0 · MINE신의 점집
+        </div>
+    </div>`;
+
+    container.querySelector('#cl-s-profile')?.addEventListener('change', e => {
+        const s = getSettings(); s.selectedProfileName = e.target.value || null; save();
+        toastr.success(e.target.value ? `"${e.target.value}" 선택됨` : '현재 연결 사용');
+    });
+    container.querySelector('#cl-s-tokens')?.addEventListener('input', e => {
+        const s = getSettings(); s.maxTokens = parseInt(e.target.value); save();
+        const v = container.querySelector('#cl-s-tokens-val');
+        if (v) v.textContent = e.target.value;
+    });
+    container.querySelector('#cl-s-uninject')?.addEventListener('click', () => {
+        clearFortune(); renderSettings(container); toastr.success('운세 주입 해제됨');
+    });
+    container.querySelector('#cl-clear-all')?.addEventListener('click', async () => {
+        const { Popup, POPUP_RESULT } = SillyTavern.getContext();
+        const confirmed = await Popup.show.confirm('전체 삭제', '모든 데이터를 삭제합니다. 복구 불가.');
+        if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
+            const s = getSettings(); s.roster=[]; s.madameList=[]; s.sajuList=[]; s.fortuneRooms=[]; s.dailyFortune=null; s.dailyFortuneInjected=false; save();
             toastr.success('전체 삭제 완료'); renderSettings(container);
         }
     });
 }
 
 // ═══════════════════════════════════════════
-// CSS 인젝션
 // ═══════════════════════════════════════════
 function injectCSS() {
     const style = document.createElement('style');
