@@ -40,7 +40,7 @@ import { PROMPT_META, DEFAULT_PROMPTS } from './prompts.js';
 // 기본 설정
 // ═══════════════════════════════════════════
 const defaultSettings = {
-    roster: [], battleList: [], madameList: [], sajuList: [], simList: [],
+    roster: [], madameList: [], sajuList: [], fortuneRooms: [],
     allowSameGender: false, selectedProfileName: null, fortuneProfileName: null,
     devUnlocked: false, prompts: null, maxTokens: 4000,
 };
@@ -52,18 +52,10 @@ let state = {
     currentTab: 'roster',
     currentMadameSubtab: 'compat',
     rosterView: 'list',
-    battleView: 'list',
     madameCompatView: 'list',
     detailCharId: null,
-    activeBattleId: null,
     activeMadameId: null,
-    battleSetup: { selected: [], condition: '' },
-    battleLang: 'ko',
-    simLang: 'ko',
-    simView: 'list',
-    activeSimId: null,
     madameSetup: { selected: [] },
-    simSetup: { selected: [], situation: '' },
     sajuView: 'list',
     sajuCharId: null,
     activeSajuId: null,
@@ -234,92 +226,6 @@ async function analyzeCharSheet(name, gender, rawSheet) {
     return parsed;
 }
 
-async function analyzeCombatProfile(char) {
-    const slot = getPromptSlot('combatProfile');
-    const raw = char.parsed?.raw || [char.parsed?.appearance, char.parsed?.personality, char.parsed?.traits, char.parsed?.job].filter(Boolean).join('\n');
-    const prompt = fillTpl(slot.user, { name: char.name, sheet: raw });
-    try {
-        const result = await callAI(prompt, slot.system);
-        return JSON.parse(result.replace(/```json|```/g, '').trim());
-    } catch {
-        return { physique: char.parsed?.appearance || '', species: '인간', job_combat: char.parsed?.job || '', experience: '', skills: '', strengths: '', weaknesses: '', psychology: char.parsed?.personality || '', background: '' };
-    }
-}
-
-async function runBattlePrompt(fighters) {
-    toastr.info('전투 프로파일 분석 중...');
-    const profiles = await Promise.all(fighters.map(f => analyzeCombatProfile(f)));
-    const slot = getPromptSlot('combat');
-    const fightersText = fighters.map((f, i) => {
-        const p = profiles[i];
-        return `【${f.name}】
-▸ 신체/나이대: ${p.physique}
-▸ 종족/존재: ${p.species}
-▸ 직업 전투 해석: ${p.job_combat}
-▸ 실전 경험: ${p.experience}
-▸ 전투 특기: ${p.skills}
-▸ 강점: ${p.strengths}
-▸ 약점: ${p.weaknesses}
-▸ 심리: ${p.psychology}
-▸ 과거사: ${p.background}
-▸ 능력치 — 전투력: ${f.stats.combat}pt / 언변: ${f.stats.roast}pt / 정신력: ${f.stats.mental}pt / 카리스마: ${f.stats.charisma}pt`;
-    }).join('\n\n');
-    const { condition } = state.battleSetup;
-    const condText = condition?.trim() ? `조건/상황: ${condition}` : '조건 없음.';
-    return await callAI(fillTpl(slot.user, { fighters: fightersText, condition: condText }), slot.system);
-}
-
-async function runCompatPrompt(cast, allowSame) {
-    const slot = getPromptSlot('compat');
-    const castDesc = cast.map(c => {
-        const intimacy = c.parsed?.intimacy || {};
-        return `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})
-성격: ${c.parsed.personality}
-특징: ${c.parsed.traits}
-외형: ${c.parsed.appearance}
-신체: ${intimacy.physique || '정보 없음'}
-킨크: ${intimacy.desire || '정보 없음'}
-성적 스타일: ${intimacy.style || '정보 없음'}
-성적 취향: ${intimacy.preference || '정보 없음'}`;
-    }).join('\n\n');
-    const isMulti = cast.length >= 3;
-    const allSameGender = cast.every(c => c.gender === cast[0].gender);
-    const sameGenderMode = allSameGender && !allowSame
-        ? `\n⚠️ 동성 캐스트 (동성 허용 OFF): 로맨스 관점이 아닌 관계 궁합(우정/라이벌/앙숙 등)으로 분석할 것. 억지로 로맨스를 만들지 말 것.`
-        : '';
-    return await callAI(fillTpl(slot.user, {
-        castDesc,
-        genderNote: allowSame ? '동성 커플도 허용' : '동성 로맨스 비허용',
-        structureNote: isMulti ? '3명 이상 — 삼각/다각 구도도 분석' : '1:1 관계 분석',
-        multiLine: isMulti ? '\n- 구도의 복잡함' : '',
-        triBlock: isMulti ? `🔺 【다각 구도 분석】\n(삼각/폴리 여부, 키맨, 구도. 점쟁이 말투 4-6문장)\n` : '',
-        sameGenderMode,
-        kinkSection: cast.some(c => c.parsed?.intimacy?.style && c.parsed.intimacy.style !== '정보 없음')
-            ? `\n🔞 【성향 궁합】\n(각 캐릭터의 킨크/성향이 서로 어떻게 맞물리는지. 점쟁이 말투로 3-4문장. 맞으면 맞다, 안 맞으면 안 맞다고 직접적으로)`
-            : '',
-    }), slot.system);
-}
-
-async function runScenarioPrompt(cast, compatResult) {
-    const slot = getPromptSlot('scenario');
-    const castDesc = cast.map(c =>
-        `${c.name}(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location}): ${c.parsed.personality} / ${c.parsed.traits}`
-    ).join('\n');
-    return await callAI(fillTpl(slot.user, { castDesc, compatResult: (compatResult || '').slice(0, 800) }), slot.system);
-}
-
-async function runSimPrompt(cast, situation, lang = 'ko') {
-    const slot = getPromptSlot('sim');
-    const outputLang = lang === 'en' ? 'English' : 'Korean';
-    const castDesc = cast.map(c =>
-        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}`
-    ).join('\n\n');
-    const langInstruction = lang === 'en' ? '[IMPORTANT: Write your entire response in English only.]\n\n' : '';
-    const prompt = langInstruction + fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' });
-    return await callAIRaw(prompt, slot.system);
-}
-
-const PROMPTS_URL = 'https://raw.githubusercontent.com/bongbong11/Scouter/main/prompts.json';
 
 // 원격 prompts.json 로드 — 로컬 오버라이드 없는 슬롯에만 적용
 async function loadRemotePrompts() {
@@ -522,21 +428,17 @@ function createFloatingPanel() {
         </div>
         <div id="cl-tabs" style="display:flex;background:linear-gradient(180deg,#0d0d20,#050510);border-bottom:1px solid #1e1e3a;flex-shrink:0">
             <button class="cl-tab" data-tab="roster">👤 캐릭터</button>
-            <button class="cl-tab" data-tab="battle">⚔️ 배틀</button>
             <button class="cl-tab" data-tab="madame">🔮 챗씨부인</button>
             <button class="cl-tab" data-tab="fortune">🔯 운명점</button>
             <button class="cl-tab" data-tab="settings">⚙️ 설정</button>
         </div>
         <div id="cl-madame-subtabs" style="display:none;flex-shrink:0;background:#0a0015;border-bottom:1px solid #330055">
             <button class="cl-madame-subtab" data-subtab="compat">💘 궁합</button>
-            <button class="cl-madame-subtab" data-subtab="sim">🎲 시뮬</button>
             <button class="cl-madame-subtab" data-subtab="saju">🪬 사주</button>
         </div>
         <div id="cl-content" style="flex:1;overflow-y:auto;overflow-x:hidden">
             <div class="cl-pane" id="cl-pane-roster"></div>
-            <div class="cl-pane" id="cl-pane-battle"></div>
             <div class="cl-pane" id="cl-pane-madame-compat"></div>
-            <div class="cl-pane" id="cl-pane-madame-sim"></div>
             <div class="cl-pane" id="cl-pane-madame-saju"></div>
             <div class="cl-pane" id="cl-pane-fortune"></div>
             <div class="cl-pane" id="cl-pane-settings"></div>
@@ -591,7 +493,7 @@ function toggleFloat() {
 // ═══════════════════════════════════════════
 function switchTab(tab) {
     state.currentTab = tab;
-    const tabColors = { roster: '#ff44aa', battle: '#ff2200', madame: '#cc44ff', fortune: '#ffcc00', settings: '#ffaa00' };
+    const tabColors = { roster: '#ff44aa', madame: '#cc44ff', fortune: '#ffcc00', settings: '#ffaa00' };
     document.querySelectorAll('#scouter-float .cl-tab').forEach(btn => {
         const isActive = btn.dataset.tab === tab;
         const color = tabColors[btn.dataset.tab] || C.accent;
@@ -619,16 +521,14 @@ function switchMadameSubtab(subtab) {
     renderActivePane();
 }
 function renderActivePane() {
-    ['roster','battle','madame-compat','madame-sim','madame-saju','fortune','settings'].forEach(p => {
+    ['roster','madame-compat','madame-saju','fortune','settings'].forEach(p => {
         const el = document.getElementById('cl-pane-' + p);
         if (el) el.className = 'cl-pane';
     });
     const tab = state.currentTab;
     if (tab === 'roster') { const el = document.getElementById('cl-pane-roster'); if (el) { el.className = 'cl-pane active'; renderRoster(el); } }
-    else if (tab === 'battle') { const el = document.getElementById('cl-pane-battle'); if (el) { el.className = 'cl-pane active'; renderBattle(el); } }
     else if (tab === 'madame') {
         if (state.currentMadameSubtab === 'compat') { const el = document.getElementById('cl-pane-madame-compat'); if (el) { el.className = 'cl-pane active'; renderMadameCompat(el); } }
-        else if (state.currentMadameSubtab === 'sim') { const el = document.getElementById('cl-pane-madame-sim'); if (el) { el.className = 'cl-pane active'; renderMadameSim(el); } }
         else if (state.currentMadameSubtab === 'saju') { const el = document.getElementById('cl-pane-madame-saju'); if (el) { el.className = 'cl-pane active'; renderMadameSaju(el); } }
     }
     else if (tab === 'fortune') { const el = document.getElementById('cl-pane-fortune'); if (el) { el.className = 'cl-pane active'; renderFortune(el); } }
@@ -920,532 +820,6 @@ function renderCharDetail(container) {
 // ═══════════════════════════════════════════
 // 배틀 탭
 // ═══════════════════════════════════════════
-function renderBattle(container) {
-    const settings = getSettings();
-    if (state.battleView === 'result' && state.activeBattleId) { renderBattleResult(container); return; }
-    if (state.battleView === 'setup') { renderBattleSetup(container); return; }
-
-    const cards = settings.battleList.map(b => {
-        return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.accent};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-battle-card" data-id="${b.id}">
-            <div style="flex:1">
-                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(b.fighters.join(' VS '))}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(b.condition||'조건 없음')}</div>
-            </div>
-            <div style="text-align:right">
-                <div style="font-size:11px;color:${C.accent};font-weight:700">🏆 ${esc(b.result)}</div>
-                <div style="font-size:9px;color:${C.textDim}">${esc(b.createdAt)}</div>
-            </div>
-            <button class="cl-battle-del" data-id="${b.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
-        </div>`;
-    }).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:20px 0">기록 없음</div>`;
-
-    container.innerHTML = `<div style="padding:14px">
-        ${renderDivider('배틀 기록', C.accent)}
-        ${cards}
-        <button id="cl-battle-new" style="width:100%;background:${C.accent};border:none;border-radius:2px;padding:9px;cursor:pointer;color:#fff;font-size:12px;font-weight:700">⚔ 새 배틀</button>
-    </div>`;
-
-    container.querySelectorAll('.cl-battle-card').forEach(card => card.addEventListener('click', () => {
-        state.activeBattleId = card.dataset.id; state.battleView = 'result'; renderActivePane();
-    }));
-    container.querySelectorAll('.cl-battle-del').forEach(btn => btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const s = getSettings(); s.battleList = s.battleList.filter(b => b.id !== btn.dataset.id); save(); renderBattle(container);
-    }));
-    container.querySelector('#cl-battle-new')?.addEventListener('click', () => {
-        state.battleSetup = { selected: [], category: 'combat', condition: '' }; state.battleView = 'setup'; renderActivePane();
-    });
-}
-
-function renderBattleSetup(container) {
-    const settings = getSettings();
-    const { selected, category, condition } = state.battleSetup;
-    const charRows = GENDER_SECTIONS.map(g => {
-        const group = settings.roster.filter(c => c.gender === g.id);
-        if (!group.length) return '';
-        return `<div style="margin-bottom:10px">
-            <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
-            ${group.map(char => {
-                const inSel = !!selected.find(c => c.id === char.id);
-                return `<div class="cl-sel-char" data-id="${char.id}" style="background:${inSel?C.accent+'22':C.bgCard};border:2px solid ${inSel?C.accent:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
-                    ${renderAvatar(char.name, char.gender, 32)}
-                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${inSel?C.textBright:C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.job||'—')}</div></div>
-                    <div style="text-align:right;font-size:10px;color:${C.textDim}">
-                        <div>⚔️ ${char.stats.combat}</div>
-                        <div>🗣️ ${char.stats.roast}</div>
-                    </div>
-                    ${inSel?`<div style="color:${C.accent}">✓</div>`:''}
-                </div>`;
-            }).join('')}
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `<div style="padding:14px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <button id="cl-battle-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
-            <span style="font-size:13px;font-weight:700;color:${C.accent}">배틀 설정</span>
-        </div>
-        ${renderDivider('파이터 선택 (2명 이상)', C.accent)}
-        ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:12px 0">등록된 캐릭터 없음</div>`}
-        ${renderDivider('조건/상황', C.accentDim)}
-        <textarea id="cl-battle-condition" rows="3" placeholder="예) 삼각관계 폭로 현장에서 마주침&#10;예) 말다툼으로 번질 것 같은 상황&#10;비워두면 그냥 붙어라" style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px">${esc(condition)}</textarea>
-        <button id="cl-battle-start" ${selected.length<2?'disabled':''} style="width:100%;background:${selected.length>=2?C.accent:'#2a1e12'};border:none;border-radius:2px;padding:9px;cursor:${selected.length>=2?'pointer':'not-allowed'};color:${selected.length>=2?'#fff':C.textDim};font-size:12px;font-weight:700">
-            ${selected.length<2?`파이터 ${Math.max(0,2-selected.length)}명 더 필요`:`⚡ ${selected.length}명 배틀 분석`}
-        </button>
-    </div>`;
-
-    container.querySelector('#cl-battle-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
-    container.querySelector('#cl-battle-lang-ko')?.addEventListener('click', () => { state.battleLang='ko'; renderBattleSetup(container); });
-    container.querySelector('#cl-battle-lang-en')?.addEventListener('click', () => { state.battleLang='en'; renderBattleSetup(container); });
-    container.querySelectorAll('.cl-sel-char').forEach(el => el.addEventListener('click', () => {
-        const char = getSettings().roster.find(c => c.id === el.dataset.id);
-        if (!char) return;
-        const idx = state.battleSetup.selected.findIndex(c => c.id === el.dataset.id);
-        if (idx >= 0) state.battleSetup.selected.splice(idx, 1); else state.battleSetup.selected.push(char);
-        renderBattleSetup(container);
-    }));
-    container.querySelector('#cl-battle-condition')?.addEventListener('input', e => state.battleSetup.condition = e.target.value);
-    container.querySelector('#cl-battle-start')?.addEventListener('click', async () => {
-        const { selected, condition } = state.battleSetup;
-        if (selected.length < 2) return;
-        showLoading(null, 'battle');
-        try {
-            const resultText = await runBattlePrompt(selected);
-            const m = resultText.match(/【.{0,4}승자[：:]\s*(.+?)】/) || resultText.match(/winner[：:]\s*(.+)/i);
-            const winner = m ? m[1].trim() : selected[0].name;
-            hideLoading();
-            const session = { id: 'battle_' + Date.now(), fighters: selected.map(f => f.name), condition, result: winner, resultText, createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
-            const s = getSettings(); s.battleList.unshift(session); save();
-            state.activeBattleId = session.id; state.battleView = 'result'; renderActivePane();
-        } catch (e) { hideLoading(); toastr.error(`배틀 실패: ${e.message}`); }
-    });
-}
-
-function renderBattleResult(container) {
-    const settings = getSettings();
-    const session = settings.battleList.find(b => b.id === state.activeBattleId);
-    if (!session) { state.battleView='list'; renderActivePane(); return; }
-    const fighters = session.fighters.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
-
-    container.innerHTML = `
-    <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
-        <button id="cl-br-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;margin-bottom:8px;padding:0">◀ 목록</button>
-        <div style="display:flex;align-items:center;gap:6px">
-            ${fighters.slice(0,2).map((f,i) => `
-            <div style="flex:1;display:flex;align-items:center;gap:8px;justify-content:${i===0?'flex-start':'flex-end'}">
-                ${i===0?renderAvatar(f.name,f.gender,34):''}
-                <div style="text-align:${i===0?'left':'right'}">
-                    <div style="font-size:11px;font-weight:700;color:${C.textBright}">${esc(f.name)}</div>
-                    <div style="font-size:10px;color:${C.textDim}">⚔️${f.stats.combat} 🗣️${f.stats.roast}</div>
-                </div>
-                ${i===1?renderAvatar(f.name,f.gender,34):''}
-            </div>
-            ${i===0?`<div style="font-weight:900;font-size:13px;color:${C.accent};padding:0 6px">VS</div>`:''}`).join('')}
-        </div>
-        ${session.condition?`<div style="margin-top:8px;font-size:10px;color:${C.textDim};padding:6px 8px;background:${C.bgCard};border-radius:2px">📍 ${esc(session.condition)}</div>`:''}
-    </div>
-    <div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;min-height:140px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(session.resultText||'')}</div>
-    </div>`;
-
-    container.querySelector('#cl-br-back')?.addEventListener('click', () => { state.battleView='list'; renderActivePane(); });
-}
-
-// ═══════════════════════════════════════════
-// 챗씨부인 — 궁합
-// ═══════════════════════════════════════════
-function renderMadameCompat(container) {
-    const settings = getSettings();
-    if (state.madameCompatView === 'result' && state.activeMadameId) { renderMadameResult(container); return; }
-    if (state.madameCompatView === 'setup') { renderMadameSetup(container); return; }
-
-    const recs = settings.madameList.map(m => `
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.purple};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-madame-rec" data-id="${m.id}">
-            <div style="flex:1">
-                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(m.cast.join(' ♥ '))}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(m.compat?.type||'—')}${m.compat?.triangle?' · 🔺삼각':''}${m.compat?.poly?' · 💫폴리':''}</div>
-            </div>
-            <div style="text-align:right">
-                <div style="font-size:22px;font-weight:900;color:${C.gold};font-family:monospace">${m.compat?.score||'?'}</div>
-                <div style="font-size:9px;color:${C.textDim}">${esc(m.createdAt||'')}</div>
-            </div>
-            <button class="cl-madame-del" data-id="${m.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
-        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">점괘가 없구나...</div>`;
-
-    container.innerHTML = `<div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:14px;text-align:center;margin-bottom:14px">
-            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-bottom:4px">◆◆◆◆◆◆◆</div>
-            <div style="font-size:15px;font-weight:700;color:${C.gold}">챗씨부인운명상담소</div>
-            <div style="font-size:10px;color:${C.textDim};margin-top:4px">그 남 그 녀의 인연의 실을 꿰어드립니다</div>
-            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-top:4px">◆◆◆◆◆◆◆</div>
-        </div>
-        ${renderDivider('궁합 기록', C.purple)}
-        ${recs}
-        <button id="cl-madame-new" style="width:100%;background:${C.purple}33;border:1px solid ${C.purple}88;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🔮 새 궁합 보기</button>
-    </div>`;
-
-    container.querySelectorAll('.cl-madame-rec').forEach(rec => rec.addEventListener('click', () => {
-        state.activeMadameId = rec.dataset.id; state.madameCompatView = 'result'; renderActivePane();
-    }));
-    container.querySelectorAll('.cl-madame-del').forEach(btn => btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const s = getSettings(); s.madameList = s.madameList.filter(m => m.id !== btn.dataset.id); save(); renderMadameCompat(container);
-    }));
-    container.querySelector('#cl-madame-new')?.addEventListener('click', () => { state.madameSetup={selected:[]}; state.madameCompatView='setup'; renderActivePane(); });
-}
-
-function renderMadameSetup(container) {
-    const settings = getSettings();
-    const { selected } = state.madameSetup;
-    const allowSame = settings.allowSameGender !== false;
-
-    const charRows = GENDER_SECTIONS.map(g => {
-        const group = settings.roster.filter(c => c.gender === g.id);
-        if (!group.length) return '';
-        return `<div style="margin-bottom:10px">
-            <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
-            ${group.map(char => {
-                const inSel = !!selected.find(c => c.id === char.id);
-                return `<div class="cl-madame-sel" data-id="${char.id}" style="background:${inSel?C.purple+'22':C.bgCard};border:2px solid ${inSel?C.purple:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
-                    ${renderAvatar(char.name, char.gender, 32)}
-                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${inSel?C.textBright:C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.job||'—')}</div></div>
-                    ${inSel?`<div style="color:${C.purple}">♥</div>`:''}
-                </div>`;
-            }).join('')}
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `<div style="padding:14px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <button id="cl-ms-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
-            <span style="font-size:13px;font-weight:700;color:${C.purple}">궁합 설정</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:11px 13px;margin-bottom:14px">
-            <div><div style="font-size:12px;color:${C.textBright};font-weight:700">동성 커플 허용</div><div style="font-size:10px;color:${C.textDim};margin-top:2px">OFF시 동성은 관계 궁합으로 분석</div></div>
-            <div id="cl-same-toggle" style="width:44px;height:24px;border-radius:12px;background:${allowSame?C.purple:'#2a1e12'};border:1px solid ${allowSame?C.purple:C.border};cursor:pointer;position:relative;transition:all.2s">
-                <div style="position:absolute;top:2px;left:${allowSame?'22':'2'}px;width:18px;height:18px;background:${allowSame?'#fff':C.textDim};border-radius:50%;transition:left.2s"></div>
-            </div>
-        </div>
-        ${renderDivider('캐스트 선택 (2명 이상)', C.purple)}
-        ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:12px 0">등록된 캐릭터 없음</div>`}
-        ${selected.length >= 2 ? `
-        <div style="background:${C.bgCard};border:1px solid ${C.purple}44;border-radius:2px;padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            ${selected.map((c,i) => `${i>0?`<span style="color:${C.purple}">♥</span>`:'' }${renderAvatar(c.name,c.gender,22)}<span style="font-size:11px;color:${C.textBright}">${esc(c.name)}</span>`).join('')}
-            ${selected.length>=3?`<div style="font-size:10px;color:${C.purple};width:100%;margin-top:4px">▲ ${selected.length}명 — 삼각/다각 구도 분석</div>`:''}
-        </div>` : ''}
-        <button id="cl-madame-go" ${selected.length<2?'disabled':''} style="width:100%;background:${selected.length>=2?C.purple+'33':'#2a1e12'};border:1px solid ${selected.length>=2?C.purple:C.border};border-radius:2px;padding:9px;cursor:${selected.length>=2?'pointer':'not-allowed'};color:${selected.length>=2?C.purple:C.textDim};font-size:12px;font-weight:700">
-            ${selected.length<2?`${Math.max(0,2-selected.length)}명 더 선택 필요`:`🔮 ${selected.length}명 궁합 보기`}
-        </button>
-    </div>`;
-
-    container.querySelector('#cl-ms-back')?.addEventListener('click', () => { state.madameCompatView='list'; renderActivePane(); });
-    container.querySelector('#cl-same-toggle')?.addEventListener('click', () => { const s=getSettings(); s.allowSameGender=!s.allowSameGender; save(); renderMadameSetup(container); });
-    container.querySelectorAll('.cl-madame-sel').forEach(el => el.addEventListener('click', () => {
-        const char = getSettings().roster.find(c => c.id === el.dataset.id);
-        if (!char) return;
-        const idx = state.madameSetup.selected.findIndex(c => c.id === el.dataset.id);
-        if (idx >= 0) state.madameSetup.selected.splice(idx, 1); else state.madameSetup.selected.push(char);
-        renderMadameSetup(container);
-    }));
-    container.querySelector('#cl-madame-go')?.addEventListener('click', async () => {
-        const { selected } = state.madameSetup;
-        if (selected.length < 2) return;
-        toastr.clear();
-        showLoading(null, 'compat');
-        try {
-            const compatText = await runCompatPrompt(selected, getSettings().allowSameGender);
-            hideLoading();
-            const scoreM = compatText.match(/총점[：:]\s*(\d+)/), typeM = compatText.match(/커플 유형[：:]\s*(.+)/);
-            const score = scoreM ? parseInt(scoreM[1]) : Math.floor(50 + Math.random() * 50);
-            const type = typeM ? typeM[1].trim() : '운명의 인연';
-            const session = { id:'madame_'+Date.now(), cast:selected.map(c=>c.name), castIds:selected.map(c=>c.id), allowSame:getSettings().allowSameGender, createdAt:new Date().toLocaleDateString('ko').slice(2).replace(/\. /g,'.'), compat:{score,type,triangle:selected.length===3,poly:selected.length>3,resultText:compatText}, scenarios:null };
-            const s = getSettings(); s.madameList.unshift(session); save();
-            state.activeMadameId = session.id; state.madameCompatView = 'result'; renderActivePane();
-        } catch (e) { hideLoading(); toastr.error(`궁합 분석 실패: ${e.message}`); }
-    });
-}
-
-function renderMadameResult(container) {
-    const settings = getSettings();
-    const session = settings.madameList.find(m => m.id === state.activeMadameId);
-    if (!session) { state.madameCompatView='list'; renderActivePane(); return; }
-    const cast = session.castIds
-        ? session.castIds.map(id => settings.roster.find(c => c.id === id)).filter(Boolean)
-        : session.cast.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
-    const compat = session.compat || {};
-    const resultText = compat.resultText || '';
-
-    function parseSection(text, icon) {
-        const m = text.match(new RegExp(icon + '[^\\n]*\\n([\\s\\S]*?)(?=📊|💘|⚡|🎭|💑|🔺|🔥|🔞|$)', 'u'));
-        return m ? m[1].trim() : '';
-    }
-    const scoreSection = parseSection(resultText, '📊');
-    const dynamicSection = parseSection(resultText, '⚡');
-    const genreSection = parseSection(resultText, '🎭');
-    const deepSection = parseSection(resultText, '💑');
-    const triSection = parseSection(resultText, '🔺');
-    const sceneSection = parseSection(resultText, '🔥');
-    const kinkSection = parseSection(resultText, '🔞');
-
-    const scoreLines = scoreSection.split('\n').filter(l => l.trim() && (l.includes(':') || l.includes('：')));
-    const scoreItems = scoreLines.map(line => {
-        const m = line.match(/(.+?)[：:]\s*(\d+)/);
-        if (!m) return '';
-        const pct = Math.min(100, parseInt(m[2]));
-        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <div style="width:80px;font-size:11px;color:${C.text};flex-shrink:0">${esc(m[1].trim())}</div>
-            <div style="flex:1;height:6px;background:${C.bgDeep};border-radius:1px;overflow:hidden">
-                <div style="width:${pct}%;height:100%;background:${C.purple}"></div>
-            </div>
-            <div style="width:28px;font-size:12px;color:${C.purple};font-weight:900;font-family:monospace;text-align:right">${m[2]}</div>
-        </div>`;
-    }).join('');
-
-    const scoreColor = compat.score >= 70 ? C.gold : compat.score >= 45 ? C.accent : '#a05050';
-
-    container.innerHTML = `
-    <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:14px;text-align:center;position:relative">
-        <button id="cl-mr-back" style="position:absolute;top:14px;left:14px;background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px">◀ 목록</button>
-        <div style="font-size:10px;color:${C.textDim};letter-spacing:2px;margin-bottom:6px">✦ 운명의 실이 얽혀 있도다 ✦</div>
-        <div style="display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap">
-            ${cast.map((c,i) => `${i>0?`<span style="color:${C.purple}">♥</span>`:''}${renderAvatar(c.name,c.gender,28)}<span style="font-size:12px;color:${C.textBright};font-weight:700">${esc(c.name)}</span>`).join('')}
-        </div>
-        ${compat.triangle?`<div style="margin-top:6px;font-size:11px;color:${C.purple}">🔺 삼각관계의 기운이 감돌도다</div>`:compat.poly?`<div style="margin-top:6px;font-size:11px;color:${C.purple}">💫 다각의 인연이로다</div>`:''}
-    </div>
-    <div style="padding:14px">
-        <div style="background:linear-gradient(180deg,#1a0030,#0f0020);border:2px solid #8800cc;border-radius:2px;padding:18px;text-align:center;margin-bottom:12px" class="cl-pulse-purple">
-            <div style="font-size:10px;color:#664488;letter-spacing:2px;margin-bottom:8px;font-family:'Noto Serif KR',serif">이 인연의 점괘는...</div>
-            <div style="font-size:54px;font-weight:900;color:${scoreColor};font-family:monospace;line-height:1;filter:drop-shadow(0 0 12px ${scoreColor}88)">${compat.score}</div>
-            <div style="font-size:9px;color:${C.textDim};margin-top:4px">/ 100점</div>
-            <div style="font-size:13px;font-weight:700;color:${C.textBright};margin-top:8px;font-family:'Noto Serif KR',serif">「${esc(compat.type)}」</div>
-        </div>
-        ${renderAccordion('📊','항목별 궁합 점수','각 기운의 수치를 보여드리리다', scoreItems || `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(scoreSection)}</div>`)}
-        ${renderAccordion('⚡','관계의 기운','쫓는 자와 도망치는 자의 인연...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(dynamicSection)}</div>`)}
-        ${renderAccordion('🎭','예상 장르 TOP 3','이 인연에 가장 잘 어울리는 이야기...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(genreSection)}</div>`)}
-        ${renderAccordion('💑','궁합 심층 분석','잘 어울리는 점 · 충돌 · 장기 전망', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(deepSection)}</div>`)}
-        ${compat.triangle||compat.poly ? renderAccordion('🔺','다각 구도 분석','키맨은 누구인가?', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(triSection)}</div>`) : ''}
-        ${kinkSection ? renderAccordion('🔞','성향 궁합','킨크/성향의 궁합...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(kinkSection)}</div>`) : ''}
-        ${renderAccordion('🔥','터질 것 같은 명장면 TOP 3','반드시 일어날 씬들이 보이는도다', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(sceneSection)}</div>`)}
-        <div style="margin-top:4px">
-            ${renderDivider('롤플 시나리오 추천', C.purple)}
-            <div id="cl-scenario-area">${session.scenarios ? renderScenarioCards(session.scenarios) : `<button id="cl-gen-scenarios" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">📖 시나리오 생성</button>`}</div>
-        </div>
-    </div>`;
-
-    container.querySelector('#cl-mr-back')?.addEventListener('click', () => { state.madameCompatView='list'; renderActivePane(); });
-    container.querySelectorAll('.cl-accordion-header').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('open')));
-    container.querySelector('#cl-gen-scenarios')?.addEventListener('click', async () => {
-        container.querySelector('#cl-scenario-area').innerHTML = '';
-        showLoading(null, 'scenario');
-        try {
-            const t = await runScenarioPrompt(cast, compat.resultText);
-            hideLoading();
-            session.scenarios = t; save();
-            container.querySelector('#cl-scenario-area').innerHTML = renderScenarioCards(t);
-            bindScenarioEvents(container);
-        } catch (e) { hideLoading(); container.querySelector('#cl-scenario-area').innerHTML = `<div style="color:#a05050;font-size:12px">실패: ${esc(e.message)}</div>`; }
-    });
-    bindScenarioEvents(container);
-}
-
-function renderScenarioCards(text) {
-    const blocks = text.split(/◆ 시나리오 \d+/).filter(b => b.trim());
-    if (!blocks.length) return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:13px;white-space:pre-wrap;font-size:12px;color:${C.text};line-height:1.9">${esc(text)}</div>`;
-    return blocks.map((block, i) => {
-        const gM = block.match(/장르[：:]\s*(.+)/), tM = block.match(/제목[：:]\s*"?(.+?)"?\n/);
-        const genre = gM ? gM[1].trim() : `시나리오 ${i+1}`, title = tM ? tM[1].trim() : '';
-        return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:13px;margin-bottom:8px" data-idx="${i}">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-                <div>
-                    <div style="font-size:10px;color:${C.purple};letter-spacing:1px">◆ ${esc(genre)}</div>
-                    <div style="font-size:13px;font-weight:700;color:${C.textBright};line-height:1.4;margin-top:4px">${esc(title)}</div>
-                </div>
-                <button class="cl-pin-btn" data-idx="${i}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 8px;cursor:pointer;color:${C.textDim};font-size:10px;white-space:nowrap">📌 고정</button>
-            </div>
-            <div style="font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap;border-top:1px solid ${C.border};padding-top:10px">${esc(block.trim())}</div>
-        </div>`;
-    }).join('') + `<button id="cl-reroll-scenarios" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:8px;cursor:pointer;color:${C.purple};font-size:11px;margin-top:4px">🔄 리롤</button>`;
-}
-
-function bindScenarioEvents(container) {
-    container.querySelectorAll('.cl-pin-btn').forEach(btn => btn.addEventListener('click', () => {
-        const isPinned = btn.closest('[data-idx]').classList.toggle('pinned');
-        btn.textContent = isPinned ? '📌 고정됨' : '📌 고정';
-        btn.style.color = isPinned ? C.purple : C.textDim;
-        btn.style.borderColor = isPinned ? C.purple : C.border;
-    }));
-    container.querySelector('#cl-reroll-scenarios')?.addEventListener('click', async () => {
-        const settings = getSettings(), session = settings.madameList.find(m => m.id === state.activeMadameId);
-        if (!session) return;
-        const cast = session.castIds ? session.castIds.map(id => settings.roster.find(c => c.id === id)).filter(Boolean) : session.cast.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
-        const area = container.querySelector('#cl-scenario-area');
-        area.innerHTML = `<div style="text-align:center;padding:20px;color:${C.textDim};font-size:12px">🔮 다시 엮는 중...</div>`;
-        try {
-            const t = await runScenarioPrompt(cast, session.compat?.resultText);
-            session.scenarios = t; save(); area.innerHTML = renderScenarioCards(t); bindScenarioEvents(container);
-        } catch (e) { area.innerHTML = `<div style="color:#a05050;font-size:12px">실패: ${esc(e.message)}</div>`; }
-    });
-}
-
-// ═══════════════════════════════════════════
-// 챗씨부인 — 시뮬
-// ═══════════════════════════════════════════
-function renderMadameSim(container) {
-    if (state.simView === 'result' && state.activeSimId) { renderSimResult(container); return; }
-    if (state.simView === 'setup') { renderSimSetup(container); return; }
-
-    // 목록
-    const settings = getSettings();
-    const list = (settings.simList || []).map(s => `
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.purple};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-sim-rec" data-id="${s.id}">
-            <div style="flex:1">
-                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(s.cast.join(' + '))}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(s.situation || '상황 없음')} · ${esc(s.createdAt || '')}</div>
-            </div>
-            <button class="cl-sim-del" data-id="${s.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
-        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">시뮬 기록 없음</div>`;
-
-    container.innerHTML = `<div style="padding:14px">
-        <div style="font-size:13px;font-weight:700;color:${C.purple};margin-bottom:12px">🎲 상황 시뮬레이터</div>
-        <div style="font-size:11px;color:${C.textDim};line-height:1.7;margin-bottom:14px">캐릭터들을 선택하고 상황을 입력하면, 로맨스/케미 관점으로 시뮬합니다.</div>
-        ${renderDivider('시뮬 기록', C.purple)}
-        ${list}
-        <button id="cl-sim-new" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🎲 새 시뮬</button>
-    </div>`;
-
-    container.querySelectorAll('.cl-sim-rec').forEach(rec => rec.addEventListener('click', () => {
-        state.activeSimId = rec.dataset.id; state.simView = 'result'; renderActivePane();
-    }));
-    container.querySelectorAll('.cl-sim-del').forEach(btn => btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const s = getSettings(); s.simList = (s.simList || []).filter(x => x.id !== btn.dataset.id); save();
-        renderMadameSim(container);
-    }));
-    container.querySelector('#cl-sim-new')?.addEventListener('click', () => {
-        state.simSetup = { selected: [], situation: '' }; state.simView = 'setup'; renderActivePane();
-    });
-}
-
-function renderSimSetup(container) {
-    const settings = getSettings();
-    const { selected, situation } = state.simSetup;
-
-    const charRows = GENDER_SECTIONS.map(g => {
-        const group = settings.roster.filter(c => c.gender === g.id);
-        if (!group.length) return '';
-        return `<div style="margin-bottom:10px">
-            <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
-            ${group.map(char => {
-                const inSel = !!selected.find(c => c.id === char.id);
-                return `<div class="cl-sim-sel" data-id="${char.id}" style="background:${inSel?C.purple+'22':C.bgCard};border:2px solid ${inSel?C.purple:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
-                    ${renderAvatar(char.name, char.gender, 28)}
-                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${inSel?C.textBright:C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.job||'—')}</div></div>
-                    ${inSel?`<span style="color:${C.purple}">♥</span>`:''}
-                </div>`;
-            }).join('')}
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `<div style="padding:14px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <button id="cl-sim-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
-            <span style="font-size:13px;font-weight:700;color:${C.purple}">시뮬 설정</span>
-        </div>
-        ${renderDivider('출력 언어', C.purple)}
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-            <button id="cl-sim-lang-ko" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${state.simLang==='ko'?C.purple+'33':'none'};border:${state.simLang==='ko'?`2px solid ${C.purple}`:`1px solid ${C.border}`};color:${state.simLang==='ko'?C.purple:C.textDim}">🇰🇷 한국어</button>
-            <button id="cl-sim-lang-en" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${state.simLang==='en'?C.purple+'33':'none'};border:${state.simLang==='en'?`2px solid ${C.purple}`:`1px solid ${C.border}`};color:${state.simLang==='en'?C.purple:C.textDim}">🇺🇸 English</button>
-        </div>
-        ${renderDivider('참가자', C.purple)}
-        ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:10px 0">등록된 캐릭터 없음</div>`}
-        ${renderDivider('상황', C.purple)}
-        <textarea id="cl-sim-situation" rows="4" placeholder="예) 두 사람이 좁은 엘리베이터에 갇혔다.&#10;예) 회사 회식에서 마주쳤다." style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px">${esc(situation)}</textarea>
-        ${selected.length>=1?`<div style="background:${C.bgCard};border:1px solid ${C.purple}44;border-radius:2px;padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${selected.map((c,i)=>`${i>0?`<span style="color:${C.purple}">+</span>`:''}${renderAvatar(c.name,c.gender,22)}<span style="font-size:11px;color:${C.textBright}">${esc(c.name)}</span>`).join('')}</div>`:''}
-        <button id="cl-sim-go" ${selected.length<1?'disabled':''} style="width:100%;background:${selected.length>=1?C.purple+'33':'#0a000f'};border:1px solid ${selected.length>=1?C.purple:C.border};border-radius:2px;padding:9px;cursor:${selected.length>=1?'pointer':'not-allowed'};color:${selected.length>=1?C.purple:C.textDim};font-size:12px;font-weight:700">${selected.length<1?'캐릭터를 선택하세요':'🎲 시뮬 시작'}</button>
-    </div>`;
-
-    container.querySelector('#cl-sim-back')?.addEventListener('click', () => { state.simView='list'; renderActivePane(); });
-    container.querySelector('#cl-sim-lang-ko')?.addEventListener('click', () => { state.simLang='ko'; renderSimSetup(container); });
-    container.querySelector('#cl-sim-lang-en')?.addEventListener('click', () => { state.simLang='en'; renderSimSetup(container); });
-    container.querySelectorAll('.cl-sim-sel').forEach(el => el.addEventListener('click', () => {
-        const char = getSettings().roster.find(c => c.id === el.dataset.id);
-        if (!char) return;
-        const idx = state.simSetup.selected.findIndex(c => c.id === el.dataset.id);
-        if (idx >= 0) state.simSetup.selected.splice(idx, 1); else state.simSetup.selected.push(char);
-        renderSimSetup(container);
-    }));
-    container.querySelector('#cl-sim-situation')?.addEventListener('input', e => state.simSetup.situation = e.target.value);
-    container.querySelector('#cl-sim-go')?.addEventListener('click', async () => {
-        if (!state.simSetup.selected.length) return;
-        showLoading(null, 'sim');
-        try {
-            const r = await runSimPrompt(state.simSetup.selected, state.simSetup.situation, state.simLang);
-            hideLoading();
-            const session = {
-                id: 'sim_' + Date.now(),
-                cast: state.simSetup.selected.map(c => c.name),
-                castIds: state.simSetup.selected.map(c => c.id),
-                situation: state.simSetup.situation,
-                lang: state.simLang,
-                resultText: r,
-                translatedText: null,
-                createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.'),
-            };
-            const s = getSettings();
-            if (!s.simList) s.simList = [];
-            s.simList.unshift(session); save();
-            state.activeSimId = session.id; state.simView = 'result'; renderActivePane();
-        } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); }
-    });
-}
-
-function renderSimResult(container) {
-    const settings = getSettings();
-    const session = (settings.simList || []).find(s => s.id === state.activeSimId);
-    if (!session) { state.simView='list'; renderActivePane(); return; }
-    const displayText = session.translatedText || session.resultText || '';
-
-    container.innerHTML = `
-    <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
-        <button id="cl-simr-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;margin-bottom:8px;padding:0">◀ 목록</button>
-        <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(session.cast.join(' + '))}</div>
-        ${session.situation?`<div style="font-size:10px;color:${C.textDim};margin-top:4px;padding:5px 8px;background:${C.bgCard};border-radius:2px">📍 ${esc(session.situation)}</div>`:''}
-    </div>
-    <div style="padding:14px">
-        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(displayText)}</div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-            <button id="cl-simr-reroll" style="flex:1;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:8px;cursor:pointer;color:${C.purple};font-size:11px;font-weight:700">🔄 다시 시뮬</button>
-            ${!session.translatedText && session.lang==='en' ? `<button id="cl-simr-translate" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:8px;cursor:pointer;color:${C.textDim};font-size:11px">🌐 한국어 번역</button>` : ''}
-            ${session.translatedText ? `<button id="cl-simr-original" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:8px;cursor:pointer;color:${C.textDim};font-size:11px">원문</button>` : ''}
-        </div>
-    </div>`;
-
-    container.querySelector('#cl-simr-back')?.addEventListener('click', () => { state.simView='list'; renderActivePane(); });
-    container.querySelector('#cl-simr-reroll')?.addEventListener('click', async () => {
-        showLoading(null, 'sim');
-        try {
-            const cast = session.castIds
-                ? session.castIds.map(id => settings.roster.find(c => c.id === id)).filter(Boolean)
-                : session.cast.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
-            const r = await runSimPrompt(cast, session.situation, session.lang);
-            hideLoading(); session.resultText = r; session.translatedText = null; save(); renderSimResult(container);
-        } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); }
-    });
-    container.querySelector('#cl-simr-translate')?.addEventListener('click', async () => {
-        const btn = container.querySelector('#cl-simr-translate');
-        btn.textContent = '번역 중...'; btn.disabled = true;
-        try {
-            const translated = await callAI(`Translate to natural Korean:\n\n${session.resultText}`, 'You are a translator. Translate to natural Korean.');
-            session.translatedText = translated; save(); renderSimResult(container);
-        } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어 번역'; btn.disabled = false; }
-    });
-    container.querySelector('#cl-simr-original')?.addEventListener('click', () => { session.translatedText = null; save(); renderSimResult(container); });
-}
-
-// ═══════════════════════════════════════════
-// ═══════════════════════════════════════════
-// 챗씨부인 — 사주풀이
-// ═══════════════════════════════════════════
 function renderMadameSaju(container) {
     const settings = getSettings();
     if (state.sajuView === 'result' && state.activeSajuId) { renderSajuResult2(container); return; }
@@ -1625,9 +999,216 @@ async function runSajuPrompt(char) {
 // ═══════════════════════════════════════════
 // 운명점 전용 AI 호출 (독립 프로필)
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// 운명점 — 챗씨부인 채팅방
+// ═══════════════════════════════════════════
+
+function stripInfoBlocks(text) {
+    return (text || '')
+        .replace(/<Scene_Info[^>]*>[\s\S]*?<\/Scene_Info>/gi, '')
+        .replace(/<scene_info[^>]*>[\s\S]*?<\/scene_info>/gi, '')
+        .replace(/<[^>]{1,200}>/g, '')
+        .replace(/\[System[^\]]*\]/gi, '')
+        .replace(/\(OOC[^)]*\)/gi, '')
+        .replace(/【[^】]{1,200}】/g, '')
+        .replace(/
+{3,}/g, '\n\n')
+        .trim();
+}
+
+function renderFortune(container) {
+    const settings = getSettings();
+    const rooms = settings.fortuneRooms || [];
+
+    const list = rooms.map(r => `
+        <div class="cl-froom" data-id="${r.id}" style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid #ffcc00;border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <div style="font-size:20px">${r.type === 'couple' ? '💑' : '🙋'}</div>
+            <div style="flex:1">
+                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(r.title)}</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(r.createdAt || '')} · 대화 ${(r.messages||[]).length}개</div>
+            </div>
+            <button class="cl-froom-del" data-id="${r.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
+        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">채팅방이 없습니다</div>`;
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid #ffcc0066;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px" class="cl-pulse-gold">
+            <div style="font-size:15px;font-weight:700;color:#ffcc00">🔯 챗씨부인 점집</div>
+            <div style="font-size:10px;color:#886633;margin-top:4px">재미로 보는 점입니다 · 실제 점술이 아닙니다</div>
+        </div>
+        ${renderDivider('채팅방 목록', '#ffcc00')}
+        ${list}
+        <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="cl-froom-couple" style="flex:1;background:#ffcc0022;border:1px solid #ffcc0066;border-radius:2px;padding:9px;cursor:pointer;color:#ffcc00;font-size:11px;font-weight:700">💑 커플 사주방</button>
+            <button id="cl-froom-personal" style="flex:1;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:11px;font-weight:700">🙋 개인 상담방</button>
+        </div>
+    </div>`;
+
+    container.querySelectorAll('.cl-froom').forEach(el => el.addEventListener('click', () => {
+        const room = (getSettings().fortuneRooms||[]).find(r => r.id === el.dataset.id);
+        if (room) renderFortuneChatRoom(container, room.id);
+    }));
+    container.querySelectorAll('.cl-froom-del').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const s = getSettings(); s.fortuneRooms = (s.fortuneRooms||[]).filter(r => r.id !== btn.dataset.id); save();
+        renderFortune(container);
+    }));
+    container.querySelector('#cl-froom-couple')?.addEventListener('click', () => renderFortuneNewRoom(container, 'couple'));
+    container.querySelector('#cl-froom-personal')?.addEventListener('click', () => renderFortuneNewRoom(container, 'personal'));
+}
+
+function renderFortuneNewRoom(container, type) {
+    if (type === 'couple') {
+        // 커플방 — 바로 생성 후 baseContext 로딩
+        const ctx = SillyTavern.getContext();
+        const char = ctx.characters?.[ctx.characterId];
+        const title = char?.name ? `${char.name} 커플 사주` : '커플 사주방';
+        const room = { id: 'froom_' + Date.now(), type: 'couple', title, baseContext: null, messages: [], createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
+        const s = getSettings(); if (!s.fortuneRooms) s.fortuneRooms = []; s.fortuneRooms.unshift(room); save();
+        renderFortuneChatRoom(container, room.id, true);
+    } else {
+        // 개인방 — 정보 입력창
+        container.innerHTML = `<div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                <button id="cl-fp-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
+                <span style="font-size:13px;font-weight:700;color:${C.purple}">🙋 개인 상담방</span>
+            </div>
+            <div style="font-size:11px;color:${C.textDim};margin-bottom:10px;line-height:1.7">상담받고 싶은 분의 정보를 자유롭게 입력하세요.<br>이름, 생년월일, 고민 등 원하는 내용을 적어주세요.</div>
+            <textarea id="cl-fp-info" rows="6" placeholder="예) 이름: 김민지, 1995년 3월 15일생, 여성. 남자친구와 헤어져야 할지 고민 중..." style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:10px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px"></textarea>
+            <button id="cl-fp-start" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:10px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🔯 상담방 만들기</button>
+        </div>`;
+        container.querySelector('#cl-fp-back')?.addEventListener('click', () => renderFortune(container));
+        container.querySelector('#cl-fp-start')?.addEventListener('click', () => {
+            const info = container.querySelector('#cl-fp-info')?.value?.trim();
+            if (!info) { toastr.warning('정보를 입력해주세요'); return; }
+            const room = { id: 'froom_' + Date.now(), type: 'personal', title: '개인 상담', baseContext: `[내담자 정보]\n${info}`, messages: [], createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
+            const s = getSettings(); if (!s.fortuneRooms) s.fortuneRooms = []; s.fortuneRooms.unshift(room); save();
+            renderFortuneChatRoom(container, room.id, false);
+        });
+    }
+}
+
+async function renderFortuneChatRoom(container, roomId, loadBase = false) {
+    const settings = getSettings();
+    let room = (settings.fortuneRooms||[]).find(r => r.id === roomId);
+    if (!room) { renderFortune(container); return; }
+
+    function renderMessages() {
+        const msgs = room.messages || [];
+        return msgs.map(m => m.role === 'user'
+            ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(m.content)}</div></div>`
+            : `<div style="display:flex;gap:10px;margin-bottom:12px"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(m.content)}</div></div>`
+        ).join('');
+    }
+
+    container.innerHTML = `
+    <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border-bottom:1px solid #ffcc0044;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <button id="cl-fc-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀</button>
+        <div style="font-size:13px;font-weight:700;color:#ffcc00;flex:1">${esc(room.title)}</div>
+        <button id="cl-fc-refresh" title="채팅 다시 읽기" style="background:none;border:1px solid #ffcc0044;border-radius:2px;padding:3px 8px;cursor:pointer;color:#ffcc00;font-size:11px">🔄</button>
+    </div>
+    <div id="cl-fc-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column">
+        ${room.baseContext === null && room.type === 'couple' ? `<div style="text-align:center;padding:20px;color:${C.textDim};font-size:11px">채팅방 정보를 불러오는 중...</div>` : renderMessages()}
+    </div>
+    <div style="padding:10px 14px;border-top:1px solid ${C.border};display:flex;gap:8px;flex-shrink:0">
+        <textarea id="cl-fc-input" rows="2" placeholder="챗씨부인에게 물어보세요..." style="flex:1;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;outline:none;resize:none;line-height:1.6"></textarea>
+        <button id="cl-fc-send" style="background:#ffcc0033;border:1px solid #ffcc0088;border-radius:2px;padding:8px 12px;cursor:pointer;color:#ffcc00;font-size:18px">↑</button>
+    </div>`;
+
+    // 커플방 baseContext 없으면 로딩
+    if (room.type === 'couple' && !room.baseContext) {
+        try {
+            const slot = getPromptSlot('fortuneBase');
+            const baseRaw = await callAIFortune(slot.user, slot.system);
+            room.baseContext = stripInfoBlocks(baseRaw);
+            // 첫 인사
+            const greetSlot = getPromptSlot('fortuneChat');
+            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext);
+            const greet = await callAI('처음 오셨네요. 첫 인사를 해주세요.', greetSystem);
+            room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
+            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
+            if (target) { target.baseContext = room.baseContext; target.messages = room.messages; save(); }
+            renderFortuneChatRoom(container, roomId, false);
+        } catch (e) { toastr.error('기반 정보 로딩 실패'); }
+        return;
+    }
+
+    // 개인방 첫 인사
+    if (room.type === 'personal' && room.messages.length === 0) {
+        try {
+            const greetSlot = getPromptSlot('fortuneChat');
+            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '');
+            const greet = await callAI('처음 오셨네요. 내담자 정보를 보고 첫 인사를 해주세요.', greetSystem);
+            room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
+            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
+            if (target) { target.messages = room.messages; save(); }
+            renderFortuneChatRoom(container, roomId, false);
+        } catch (e) { toastr.error('첫 인사 실패'); }
+        return;
+    }
+
+    container.querySelector('#cl-fc-back')?.addEventListener('click', () => renderFortune(container));
+
+    container.querySelector('#cl-fc-refresh')?.addEventListener('click', async () => {
+        if (room.type !== 'couple') return;
+        toastr.info('채팅 다시 읽는 중...');
+        try {
+            const slot = getPromptSlot('fortuneBase');
+            const baseRaw = await callAIFortune(slot.user, slot.system);
+            room.baseContext = stripInfoBlocks(baseRaw);
+            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
+            if (target) { target.baseContext = room.baseContext; save(); }
+            toastr.success('업데이트 완료');
+        } catch (e) { toastr.error('새로고침 실패'); }
+    });
+
+    const msgEl = container.querySelector('#cl-fc-messages');
+    if (msgEl) msgEl.scrollTop = msgEl.scrollHeight;
+
+    const send = async () => {
+        const input = container.querySelector('#cl-fc-input');
+        const text = input?.value?.trim();
+        if (!text) return;
+        input.value = '';
+
+        room.messages.push({ role: 'user', content: text });
+        const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
+        if (target) { target.messages = room.messages; save(); }
+
+        // 메시지 업데이트
+        if (msgEl) {
+            msgEl.innerHTML = (room.messages||[]).map(m => m.role === 'user'
+                ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(m.content)}</div></div>`
+                : `<div style="display:flex;gap:10px;margin-bottom:12px"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(m.content)}</div></div>`
+            ).join('') + `<div style="text-align:center;padding:10px;color:${C.textDim};font-size:11px">...</div>`;
+            msgEl.scrollTop = msgEl.scrollHeight;
+        }
+
+        try {
+            const slot = getPromptSlot('fortuneChat');
+            const system = slot.system.replace('{{baseContext}}', room.baseContext || '');
+            const historyMsgs = (room.messages||[]).slice(-20).map(m => ({ role: m.role, content: m.content }));
+            const response = await callAIWithHistory(system, historyMsgs);
+            const cleaned = filterPhoneTrigger(response);
+            room.messages.push({ role: 'assistant', content: cleaned });
+            if (target) { target.messages = room.messages; save(); }
+            if (msgEl) {
+                msgEl.innerHTML = (room.messages||[]).map(m => m.role === 'user'
+                    ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(m.content)}</div></div>`
+                    : `<div style="display:flex;gap:10px;margin-bottom:12px"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(m.content)}</div></div>`
+                ).join('');
+                msgEl.scrollTop = msgEl.scrollHeight;
+            }
+        } catch (e) { toastr.error(`실패: ${e.message}`); }
+    };
+
+    container.querySelector('#cl-fc-send')?.addEventListener('click', send);
+    container.querySelector('#cl-fc-input')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+}
+
 async function callAIFortune(prompt, systemPrompt) {
     const ctx = SillyTavern.getContext();
-    // generateQuietPrompt — 채팅+로어북+캐릭시트+프리셋 전체 컨텍스트 포함
     const result = await ctx.generateQuietPrompt({
         quietPrompt: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt,
         quietToLoud: true,
@@ -1636,101 +1217,32 @@ async function callAIFortune(prompt, systemPrompt) {
     return filterPhoneTrigger(result || '');
 }
 
-async function runFortunePrompt() {
+async function callAIWithHistory(system, messages) {
     const ctx = SillyTavern.getContext();
-    const char = ctx.characters?.[ctx.characterId];
-    const charName = char?.name || 'the character';
-    const slot = getPromptSlot('fortune');
-    const prompt = fillTpl(slot.user, { char: charName });
-    return await callAIFortune(prompt, slot.system);
-}
-
-// ═══════════════════════════════════════════
-// 운명점 탭 렌더링
-// ═══════════════════════════════════════════
-function renderFortune(container) {
-    const ctx = SillyTavern.getContext();
-    const char = ctx.characters?.[ctx.characterId];
-    const charName = char?.name || '캐릭터 없음';
-
-    if (!container._fs) container._fs = { lang: 'en', result: null, translated: null };
-    const fs = container._fs;
-
-    const C_gold = '#ffcc00';
-    const langBtnStyle = (active) => `flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${active?C_gold+'33':'none'};border:${active?'2px solid '+C_gold:'1px solid #330055'};color:${active?C_gold:'#664466'}`;
-
-    container.innerHTML = `<div style="padding:14px">
-        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid ${C_gold}66;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px" class="cl-pulse-gold">
-            <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-bottom:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
-            <div style="font-size:15px;font-weight:700;color:${C_gold};text-shadow:0 0 10px ${C_gold}88">🔯 운명점</div>
-            <div style="font-size:10px;color:#886633;margin-top:4px">채팅 전체를 읽고 두 사람의 운명을 분석합니다</div>
-            <div style="font-size:9px;color:#664422;letter-spacing:4px;margin-top:4px;font-family:monospace">◆◆◆◆◆◆◆</div>
-        </div>
-        <div style="background:#0f0015;border:1px solid #330055;border-radius:2px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
-            <span style="font-size:22px">💬</span>
-            <div><div style="font-size:13px;font-weight:700;color:#ffccff">${charName}</div>
-            <div style="font-size:10px;color:#664466;margin-top:2px">메인 모델+프리셋으로 현재 채팅 컨텍스트 전체 참조</div></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-            <button id="cl-fl-ko" style="${langBtnStyle(fs.lang==='ko')}">🇰🇷 한국어</button>
-            <button id="cl-fl-en" style="${langBtnStyle(fs.lang==='en')}">🇺🇸 English</button>
-        </div>
-        <button id="cl-fortune-go" style="width:100%;background:${C_gold}22;border:2px solid ${C_gold}88;border-radius:2px;padding:12px;cursor:pointer;color:${C_gold};font-size:13px;font-weight:700;margin-bottom:16px">
-            🔯 MINE신의 계시를 받습니다
-        </button>
-        <div id="cl-fortune-result">
-            ${fs.result ? renderFortuneResult(fs.translated || fs.result) + `
-            <div style="display:flex;gap:8px;margin-top:12px">
-                ${!fs.translated && fs.lang==='en' ? `<button id="cl-ft-translate" style="flex:1;background:#cc44ff22;border:1px solid #cc44ff66;border-radius:2px;padding:8px;cursor:pointer;color:#cc44ff;font-size:11px;font-weight:700">🌐 한국어로 번역</button>` : ''}
-                ${fs.translated ? `<button id="cl-ft-original" style="flex:1;background:none;border:1px solid #330055;border-radius:2px;padding:8px;cursor:pointer;color:#664466;font-size:11px">원문</button><button id="cl-ft-translated" style="flex:1;background:#cc44ff22;border:1px solid #cc44ff66;border-radius:2px;padding:8px;cursor:pointer;color:#cc44ff;font-size:11px">번역</button>` : ''}
-            </div>` : ''}
-        </div>
-    </div>`;
-
-    container.querySelector('#cl-fl-ko')?.addEventListener('click', () => { fs.lang='ko'; fs.result=null; fs.translated=null; renderFortune(container); });
-    container.querySelector('#cl-fl-en')?.addEventListener('click', () => { fs.lang='en'; fs.result=null; fs.translated=null; renderFortune(container); });
-
-    container.querySelector('#cl-fortune-go')?.addEventListener('click', async () => {
-        const resultEl = container.querySelector('#cl-fortune-result');
-        resultEl.innerHTML = `<div style="text-align:center;padding:30px;color:#664466;font-size:12px">MINE신의 계시가 내려오고 있습니다...</div>`;
-        try {
-            const slot = getPromptSlot('fortune');
-            const prompt = fillTpl(slot.user, { char: charName });
-            const langInstruction = fs.lang === 'ko' ? '[IMPORTANT: Write your entire response in Korean only.]\n\n' : '[IMPORTANT: Write your entire response in English only.]\n\n';
-            const fullPrompt = `${slot.system}\n\n${langInstruction}${prompt}`;
-            fs.result = await callAIFortune(fullPrompt, null);
-            fs.translated = null;
-            renderFortune(container);
-        } catch (e) {
-            resultEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:12px">실패: ${e.message}</div>`;
+    const settings = getSettings();
+    const profileName = settings.selectedProfileName || null;
+    if (profileName && ctx.ConnectionManagerRequestService) {
+        const profiles = ctx.extensionSettings?.['connectionManager']?.profiles || [];
+        const profile = profiles.find(p => p.name === profileName);
+        if (profile) {
+            const msgs = [{ role: 'user', content: system + '\n\n아래 대화를 이어가세요.' }, ...messages];
+            const response = await ctx.ConnectionManagerRequestService.sendRequest(
+                profile.id, msgs, settings.maxTokens || 4000,
+                { stream: false, extractData: true, includePreset: true, includeInstruct: false }
+            );
+            let raw = '';
+            if (typeof response === 'string') raw = response;
+            else if (response?.choices?.[0]?.message?.content) raw = response.choices[0].message.content;
+            else if (response?.content?.[0]?.text) raw = response.content[0].text;
+            return filterPhoneTrigger(raw);
         }
-    });
-
-    container.querySelector('#cl-ft-translate')?.addEventListener('click', async () => {
-        const btn = container.querySelector('#cl-ft-translate');
-        btn.textContent = '번역 중...'; btn.disabled = true;
-        try {
-            fs.translated = await callAI(`Translate to natural Korean. Keep section emoji and labels as-is:\n\n${fs.result}`, 'Translate to natural Korean. Keep emoji section labels unchanged.');
-            renderFortune(container);
-        } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어로 번역'; btn.disabled = false; }
-    });
-    container.querySelector('#cl-ft-original')?.addEventListener('click', () => { fs.translated = null; renderFortune(container); });
-    container.querySelector('#cl-ft-translated')?.addEventListener('click', () => renderFortune(container));
-}
-
-function renderFortuneResult(text) {
-    const regex = /([🔮💭⚡🌪️🌊✨])\s+([^\n]+)\n([\s\S]*?)(?=[🔮💭⚡🌪️🌊✨]|$)/gu;
-    let html = '', match, found = false;
-    while ((match = regex.exec(text)) !== null) {
-        found = true;
-        html += `<div style="margin-bottom:20px">
-            <div style="font-size:13px;font-weight:700;color:#ffcc00;margin-bottom:8px;font-family:monospace">${match[1]} ${match[2].trim()}</div>
-            <div style="font-size:12px;color:#cc99cc;line-height:2;white-space:pre-wrap">${match[3].trim()}</div>
-        </div>`;
     }
-    if (!found) html = `<div style="font-size:12px;color:#cc99cc;line-height:2;white-space:pre-wrap">${text}</div>`;
-    return `<div style="background:#050008;border:1px solid #330055;border-radius:2px;padding:16px">${html}</div>`;
+    const { generateRaw } = ctx;
+    const lastMsg = messages[messages.length - 1]?.content || '';
+    const result = await generateRaw({ systemPrompt: system, prompt: lastMsg });
+    return filterPhoneTrigger(result || '');
 }
+
 
 
 function renderSettings(container) {
