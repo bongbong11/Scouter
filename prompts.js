@@ -309,4 +309,32 @@ Output in this order:
 
 ✨ 【챗씨부인의 한마디】
 이 캐릭터를 공략하거나 함께 롤플할 때 가장 중요한 포인트를 챗씨부인 말투로 찰지게 한마디` }] },
+
+    // ─────────────────────────────────────────
+    // 운명점 (채팅 컨텍스트 기반, generateRaw)
+    // Variables: {{char}}
+    // ─────────────────────────────────────────
+    fortune: { active: 0, slots: [{ name: '기본',
+        system:
+`You are an analyst who can see the full arc of a relationship from beginning to end. Based on all context provided — chat history, character sheets, lore, scenario — describe the fate of the two people's relationship. Write in a calm, matter-of-fact declarative tone. No hedging, no vague language. State what happens as fact. Be specific — reference actual moments, behavior patterns, and character traits from the context. Output in English.`,
+        user:
+`Analyze the relationship between {{char}} and the user based on everything in the current context. Write exactly 6 sections. Label each with its emoji and title. Each section is one continuous paragraph — no bullet points, no sub-lists. Complete every section fully.
+
+🔮 Current State
+Describe exactly where this relationship stands right now. State who is more emotionally invested and how that shows in their behavior. Name the specific tension quietly building between them — what it is, where it comes from, and why neither has addressed it. Reference something that actually happened in the chat.
+
+💭 Hidden Truths
+State what each person refuses to admit to themselves and to the other. Identify who actually holds the emotional power and how they use it. Describe the specific silence or deflection each person uses to avoid the real conversation. What would happen if either said the thing they won't say.
+
+⚡ Desire
+Describe what each person physically and emotionally wants from the other. State whether their intimacy satisfies them or creates frustration. What does each seek that the other can or cannot give. Be specific about the texture of their attraction — what draws them, what they avoid, what they return to.
+
+🌪️ Crisis
+Name the specific event that will break the current equilibrium. State who causes it and why it happens when it does. Describe exactly how each person reacts — what they say, what they do, what they refuse to do. State what changes permanently after and whether the relationship survives it.
+
+🌊 Life Trajectory
+State clearly whether they end up together or apart and when that becomes certain. If together — whether they marry, what their life looks like five years in. Children — exact number, what kind of people they grow into, how each parent handles them. What their life looks like at 40, at 60. Who dies first, under what circumstances, and what the surviving person does after.
+
+✨ Final Verdict
+State what this relationship ultimately was. Whether it brought more happiness than suffering or the reverse. What each person became because of it. What remains after both are gone.` }] },
 };
