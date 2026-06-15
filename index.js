@@ -1,6 +1,6 @@
 /**
- * SCOUTER — 챗씨부인운명상담소
- * SillyTavern Extension v2.0.0
+ * 챗씨부인상담소
+ * SillyTavern Extension v3.0.0
  */
 
 import { event_types } from '../../../events.js';
@@ -11,22 +11,22 @@ const MODULE_NAME = 'character_lab';
 // 상수
 // ═══════════════════════════════════════════
 const STAT_META = {
-    combat:   { label: '⚔️ 전투력',   color: '#ff2200' },
-    roast:    { label: '🗣️ 언변',     color: '#ff8800' },
-    sex:      { label: '🔥 성적매력', color: '#ff1177' },
-    mental:   { label: '🧠 정신력',   color: '#9900ff' },
-    charisma: { label: '👑 카리스마', color: '#ffaa00' },
+    charm:    { label: '🌹 매력',   color: '#ff44aa' },
+    presence: { label: '👑 존재감', color: '#ffaa00' },
+    desire:   { label: '🔥 욕망',   color: '#ff1177' },
+    wit:      { label: '🧠 지략',   color: '#9900ff' },
+    aura:     { label: '⚡ 기세',   color: '#4488ff' },
 };
 const GENDER_SECTIONS = [
     { id: 'female', label: '♀ 여성', color: '#ff44aa' },
     { id: 'male',   label: '♂ 남성', color: '#4488ff' },
 ];
 const RANK_THRESHOLDS = [
-    { min: 430, label: '신급 ★★★★★', color: '#fff700' },
-    { min: 380, label: '초인급 ★★★★', color: '#ff8800' },
-    { min: 320, label: '엘리트 ★★★',  color: '#ff2200' },
-    { min: 260, label: '강자 ★★',     color: '#4488ff' },
-    { min: 0,   label: '범인 ★',      color: '#664466' },
+    { min: 450, label: '전설 ✦✦✦✦✦', color: '#fff700' },
+    { min: 380, label: '압도 ✦✦✦✦',  color: '#ff8800' },
+    { min: 300, label: '강자 ✦✦✦',   color: '#cc44ff' },
+    { min: 220, label: '보통 ✦✦',    color: '#4488ff' },
+    { min: 0,   label: '범인 ✦',     color: '#664466' },
 ];
 
 // ═══════════════════════════════════════════
@@ -43,6 +43,7 @@ const defaultSettings = {
     roster: [], madameList: [], sajuList: [], fortuneRooms: [],
     allowSameGender: false, selectedProfileName: null, fortuneProfileName: null,
     devUnlocked: false, prompts: null, maxTokens: 4000,
+    dailyFortune: null, dailyFortuneInjected: false,
 };
 
 // ═══════════════════════════════════════════
@@ -78,8 +79,8 @@ function save() { SillyTavern.getContext().saveSettingsDebounced(); }
 function getRank(t) { return RANK_THRESHOLDS.find(r => t >= r.min) || RANK_THRESHOLDS[RANK_THRESHOLDS.length - 1]; }
 
 function getCharLabel(stats) {
-    const { combat, roast, sex, mental, charisma } = stats;
-    const total = combat + roast + sex + mental + charisma;
+    const { charm, presence, desire, wit, aura } = stats;
+    const total = charm + presence + desire + wit + aura;
     const avg = total / 5;
 
     // 고르게 높거나 낮은 경우
@@ -96,27 +97,27 @@ function getCharLabel(stats) {
     }
 
     // 1위 스탯 찾기
-    const entries = { combat, roast, sex, mental, charisma };
+    const entries = { charm, presence, desire, wit, aura };
     const top = Object.entries(entries).sort((a, b) => b[1] - a[1])[0][0];
     const topVal = entries[top];
     const high = topVal >= 80;
 
     switch (top) {
-        case 'combat':
-            if (high) return topVal >= 90 ? '살아있는 무기' : '전장의 포식자';
-            return topVal >= 60 ? '거친 싸움꾼' : '몸으로 말하는 타입';
-        case 'roast':
-            if (high) return topVal >= 90 ? '말로 죽이는 타입' : '냉혹한 조율사';
-            return topVal >= 60 ? '날 선 혀끝' : '말빨 하나는 확실한';
-        case 'sex':
+        case 'charm':
+            if (high) return topVal >= 90 ? '눈을 못 떼게 하는 존재' : '치명적 매력의 소유자';
+            return topVal >= 60 ? '분위기 있는 타입' : '호감 가는 얼굴';
+        case 'presence':
+            if (high) return topVal >= 90 ? '공간을 삼키는 존재' : '그림자 실세';
+            return topVal >= 60 ? '자연스러운 중심' : '은근히 눈에 띄는 타입';
+        case 'desire':
             if (high) return topVal >= 90 ? '존재 자체가 위험' : '치명적 유혹자';
             return topVal >= 60 ? '무심한 자석' : '모르는 척하는 매력';
-        case 'mental':
-            if (high) return topVal >= 90 ? '감정 없는 기계' : '흔들리지 않는 벽';
+        case 'wit':
+            if (high) return topVal >= 90 ? '말로 죽이는 타입' : '냉혹한 조율사';
+            return topVal >= 60 ? '날 선 혀끝' : '눈치 하나는 확실한';
+        case 'aura':
+            if (high) return topVal >= 90 ? '살아있는 압력' : '흔들리지 않는 벽';
             return topVal >= 60 ? '냉정한 관찰자' : '속 알 수 없는 타입';
-        case 'charisma':
-            if (high) return topVal >= 90 ? '공간을 삼키는 존재' : '그림자 실세';
-            return topVal >= 60 ? '자연스러운 리더' : '은근히 중심 잡는 타입';
         default:
             return '정체불명';
     }
@@ -210,7 +211,7 @@ async function analyzeCharSheet(name, gender, rawSheet) {
         parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
         if (!parsed.gender) parsed.gender = gender;
     } catch {
-        parsed = { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { combat: 50, roast: 50, sex: 50, mental: 50, charisma: 50 } };
+        parsed = { age: '불명', job: '불명', location: '불명', appearance: '분석 실패', personality: '분석 실패', traits: '분석 실패', gender, stats: { charm: 50, presence: 50, desire: 50, wit: 50, aura: 50 } };
     }
 
     // 2차 호출 — intimacy 따로
@@ -421,28 +422,30 @@ function createFloatingPanel() {
         ">
             <span style="font-size:16px;filter:drop-shadow(0 0 6px #ff2200)">🔴</span>
             <div style="flex:1">
-                <div style="font-weight:900;font-size:13px;letter-spacing:2px;font-family:monospace" class="cl-shimmer">SCOUTER</div>
-                <div style="font-size:9px;color:#440033;letter-spacing:1px;font-family:monospace">챗씨부인운명상담소</div>
+                <div style="font-weight:900;font-size:13px;letter-spacing:2px;font-family:monospace" class="cl-shimmer">챗씨부인상담소</div>
+                <div style="font-size:9px;color:#440033;letter-spacing:1px;font-family:monospace">MINE신의 점집</div>
             </div>
+            <button id="cl-settings-btn" style="background:none;border:none;padding:4px 6px;cursor:pointer;font-size:15px;opacity:0.6;line-height:1" title="설정">⚙️</button>
             <button id="scouter-close" style="background:none;border:1px solid #440033;border-radius:3px;color:#664433;cursor:pointer;font-size:12px;padding:2px 7px;font-family:monospace">✕</button>
         </div>
         <div id="cl-tabs" style="display:flex;background:linear-gradient(180deg,#0d0d20,#050510);border-bottom:1px solid #1e1e3a;flex-shrink:0">
-            <button class="cl-tab" data-tab="roster">👤 캐릭터</button>
-            <button class="cl-tab" data-tab="madame">🔮 챗씨부인</button>
-            <button class="cl-tab" data-tab="fortune">🔯 운명점</button>
-            <button class="cl-tab" data-tab="settings">⚙️ 설정</button>
+            <button class="cl-tab" data-tab="roster">📋 손님명부</button>
+            <button class="cl-tab" data-tab="madame">🔮 점괘</button>
+            <button class="cl-tab" data-tab="fortune">🔯 신당</button>
         </div>
         <div id="cl-madame-subtabs" style="display:none;flex-shrink:0;background:#0a0015;border-bottom:1px solid #330055">
             <button class="cl-madame-subtab" data-subtab="compat">💘 궁합</button>
             <button class="cl-madame-subtab" data-subtab="saju">🪬 사주</button>
+            <button class="cl-madame-subtab" data-subtab="fortune">☀️ 운세</button>
         </div>
         <div id="cl-content" style="flex:1;overflow-y:auto;overflow-x:hidden">
             <div class="cl-pane" id="cl-pane-roster"></div>
             <div class="cl-pane" id="cl-pane-madame-compat"></div>
             <div class="cl-pane" id="cl-pane-madame-saju"></div>
+            <div class="cl-pane" id="cl-pane-madame-fortune"></div>
             <div class="cl-pane" id="cl-pane-fortune"></div>
-            <div class="cl-pane" id="cl-pane-settings"></div>
         </div>
+        <div id="scouter-resize" style="position:absolute;bottom:0;right:0;width:22px;height:22px;cursor:se-resize;display:flex;align-items:flex-end;justify-content:flex-end;padding:3px;opacity:0.5;font-size:14px;user-select:none;touch-action:none">⇲</div>
     </div>`;
 }
 
@@ -451,19 +454,45 @@ function createFloatingPanel() {
 // ═══════════════════════════════════════════
 function makeDraggable(panel, handle) {
     let drag = false, sx, sy, sl, st;
-    handle.addEventListener('mousedown', e => {
-        if (e.target.id === 'scouter-close') return;
-        drag = true; sx = e.clientX; sy = e.clientY;
+
+    function startDrag(cx, cy) {
+        drag = true; sx = cx; sy = cy;
         const r = panel.getBoundingClientRect();
-        sl = r.left; st = r.top; panel.style.right = 'auto';
+        sl = r.left; st = r.top;
+        panel.style.right = 'auto';
         document.body.style.userSelect = 'none';
-    });
-    document.addEventListener('mousemove', e => {
+    }
+    function moveDrag(cx, cy) {
         if (!drag) return;
-        panel.style.left = Math.max(0, sl + e.clientX - sx) + 'px';
-        panel.style.top = Math.max(0, st + e.clientY - sy) + 'px';
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const pw = panel.offsetWidth, ph = panel.offsetHeight;
+        const nx = Math.max(0, Math.min(vw - pw, sl + cx - sx));
+        const ny = Math.max(0, Math.min(vh - 60, st + cy - sy));
+        panel.style.left = nx + 'px';
+        panel.style.top = ny + 'px';
+    }
+    function endDrag() { drag = false; document.body.style.userSelect = ''; }
+
+    handle.addEventListener('mousedown', e => {
+        if (e.target.closest('button')) return;
+        startDrag(e.clientX, e.clientY);
     });
-    document.addEventListener('mouseup', () => { drag = false; document.body.style.userSelect = ''; });
+    document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+    document.addEventListener('mouseup', endDrag);
+
+    // 터치 지원
+    handle.addEventListener('touchstart', e => {
+        if (e.target.closest('button')) return;
+        const t = e.touches[0];
+        startDrag(t.clientX, t.clientY);
+        e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchmove', e => {
+        if (!drag) return;
+        moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchend', endDrag);
 }
 
 // ═══════════════════════════════════════════
@@ -474,9 +503,51 @@ function openFloat() {
     document.body.insertAdjacentHTML('beforeend', createFloatingPanel());
     const panel = document.getElementById('scouter-float');
     makeDraggable(panel, document.getElementById('scouter-drag-handle'));
+
+    // 리사이즈 핸들 (마우스 + 터치)
+    const resizeHandle = document.getElementById('scouter-resize');
+    if (resizeHandle) {
+        let resizing = false, rx, ry, rw, rh;
+        const startResize = (cx, cy) => {
+            resizing = true; rx = cx; ry = cy;
+            rw = panel.offsetWidth; rh = panel.offsetHeight;
+            document.body.style.userSelect = 'none';
+        };
+        const doResize = (cx, cy) => {
+            if (!resizing) return;
+            const nw = Math.max(300, rw + cx - rx);
+            const nh = Math.max(360, rh + cy - ry);
+            panel.style.width = nw + 'px';
+            panel.style.height = nh + 'px';
+        };
+        const endResize = () => { resizing = false; document.body.style.userSelect = ''; };
+        resizeHandle.addEventListener('mousedown', e => { startResize(e.clientX, e.clientY); e.preventDefault(); });
+        document.addEventListener('mousemove', e => doResize(e.clientX, e.clientY));
+        document.addEventListener('mouseup', endResize);
+        resizeHandle.addEventListener('touchstart', e => { const t = e.touches[0]; startResize(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+        document.addEventListener('touchmove', e => { if (resizing) { doResize(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
+        document.addEventListener('touchend', endResize);
+    }
     panel.querySelectorAll('.cl-tab').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
     panel.querySelectorAll('.cl-madame-subtab').forEach(btn => btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab)));
     document.getElementById('scouter-close')?.addEventListener('click', closeFloat);
+    document.getElementById('cl-settings-btn')?.addEventListener('click', () => {
+        const existing = document.getElementById('cl-settings-overlay');
+        if (existing) { existing.remove(); return; }
+        const overlay = document.createElement('div');
+        overlay.id = 'cl-settings-overlay';
+        overlay.style.cssText = `position:absolute;top:0;left:0;right:0;bottom:0;background:${C.bg};z-index:20;overflow-y:auto`;
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕ 닫기';
+        closeBtn.style.cssText = `position:sticky;top:0;width:100%;background:${C.bgDeep};border:none;border-bottom:1px solid ${C.border};padding:8px;cursor:pointer;color:${C.textDim};font-size:11px;z-index:21`;
+        closeBtn.onclick = () => overlay.remove();
+        overlay.appendChild(closeBtn);
+        const inner = document.createElement('div');
+        overlay.appendChild(inner);
+        const content = document.getElementById('cl-content');
+        if (content) { content.style.position = 'relative'; content.appendChild(overlay); }
+        renderSettings(inner);
+    });
     state.isPanelOpen = true;
     switchTab('roster');
 }
@@ -493,7 +564,7 @@ function toggleFloat() {
 // ═══════════════════════════════════════════
 function switchTab(tab) {
     state.currentTab = tab;
-    const tabColors = { roster: '#ff44aa', madame: '#cc44ff', fortune: '#ffcc00', settings: '#ffaa00' };
+    const tabColors = { roster: '#ff44aa', madame: '#cc44ff', fortune: '#ffcc00' };
     document.querySelectorAll('#scouter-float .cl-tab').forEach(btn => {
         const isActive = btn.dataset.tab === tab;
         const color = tabColors[btn.dataset.tab] || C.accent;
@@ -521,7 +592,7 @@ function switchMadameSubtab(subtab) {
     renderActivePane();
 }
 function renderActivePane() {
-    ['roster','madame-compat','madame-saju','fortune','settings'].forEach(p => {
+    ['roster','madame-compat','madame-saju','madame-fortune','fortune'].forEach(p => {
         const el = document.getElementById('cl-pane-' + p);
         if (el) el.className = 'cl-pane';
     });
@@ -530,6 +601,7 @@ function renderActivePane() {
     else if (tab === 'madame') {
         if (state.currentMadameSubtab === 'compat') { const el = document.getElementById('cl-pane-madame-compat'); if (el) { el.className = 'cl-pane active'; renderMadameCompat(el); } }
         else if (state.currentMadameSubtab === 'saju') { const el = document.getElementById('cl-pane-madame-saju'); if (el) { el.className = 'cl-pane active'; renderMadameSaju(el); } }
+        else if (state.currentMadameSubtab === 'fortune') { const el = document.getElementById('cl-pane-madame-fortune'); if (el) { el.className = 'cl-pane active'; renderDailyFortune(el); } }
     }
     else if (tab === 'fortune') { const el = document.getElementById('cl-pane-fortune'); if (el) { el.className = 'cl-pane active'; renderFortune(el); } }
     else if (tab === 'settings') { const el = document.getElementById('cl-pane-settings'); if (el) { el.className = 'cl-pane active'; renderSettings(el); } }
@@ -820,6 +892,289 @@ function renderCharDetail(container) {
 // ═══════════════════════════════════════════
 // 배틀 탭
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// 챗씨부인 — 궁합
+// ═══════════════════════════════════════════
+async function runCompatPrompt(cast, allowSame) {
+    const slot = getPromptSlot('compat');
+    const castDesc = cast.map(c =>
+        `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location})
+성격: ${c.parsed.personality}
+특징: ${c.parsed.traits}
+외형: ${c.parsed.appearance}
+탄크/성향: ${c.parsed.kink || '없음'}`
+    ).join('
+
+');
+    const isMulti = cast.length >= 3;
+    const allSameGender = cast.every(c => c.gender === cast[0].gender);
+    const sameGenderMode = allSameGender && !allowSame
+        ? `
+⚠️ 동성 캐스트 (동성 허용 OFF): 로맨스 관점이 아닌 관계 궁합(우정/라이벌/앙숙 등)으로 분석할 것. 억지로 로맨스를 만들지 말 것.`
+        : '';
+    return await callAI(fillTpl(slot.user, {
+        castDesc,
+        genderNote: allowSame ? '동성 커플도 허용' : '동성 로맨스 비허용',
+        structureNote: isMulti ? '3명 이상 — 삼각/다각 구도도 분석' : '1:1 관계 분석',
+        multiLine: isMulti ? '
+- 구도의 복잡함' : '',
+        triBlock: isMulti ? `🔺 【다각 구도 분석】
+(삼각/폴리 여부, 키맨, 구도. 점쟁이 말투 4-6문장)
+` : '',
+        sameGenderMode,
+        kinkSection: cast.some(c => c.parsed?.kink && c.parsed.kink !== '없음')
+            ? `
+🔞 【성향 궁합】
+(각 캐릭터의 탄크/성향이 서로 어떻게 맞물리는지. 점쟁이 말투로 3-4문장. 맞으면 맞다, 안 맞으면 안 맞다고 직접적으로)`
+            : '',
+    }), slot.system);
+}
+
+async function runScenarioPrompt(cast, compatResult) {
+    const slot = getPromptSlot('scenario');
+    const castDesc = cast.map(c =>
+        `${c.name}(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job}, ${c.parsed.location}): ${c.parsed.personality} / ${c.parsed.traits}`
+    ).join('
+');
+    return await callAI(fillTpl(slot.user, { castDesc, compatResult: (compatResult || '').slice(0, 800) }), slot.system);
+}
+
+function renderMadameCompat(container) {
+    const settings = getSettings();
+    if (state.madameCompatView === 'result' && state.activeMadameId) { renderMadameResult(container); return; }
+    if (state.madameCompatView === 'setup') { renderMadameSetup(container); return; }
+
+    const recs = settings.madameList.map(m => `
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.purple};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-madame-rec" data-id="${m.id}">
+            <div style="flex:1">
+                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(m.cast.join(' ♥ '))}</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(m.compat?.type||'—')}${m.compat?.triangle?' · 🔺삼각':''}${m.compat?.poly?' · 💫폴리':''}</div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-size:22px;font-weight:900;color:${C.gold};font-family:monospace">${m.compat?.score||'?'}</div>
+                <div style="font-size:9px;color:${C.textDim}">${esc(m.createdAt||'')}</div>
+            </div>
+            <button class="cl-madame-del" data-id="${m.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
+        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">점괘가 없구나...</div>`;
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:14px;text-align:center;margin-bottom:14px">
+            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-bottom:4px">◆◆◆◆◆◆◆</div>
+            <div style="font-size:15px;font-weight:700;color:${C.gold}">챗씨부인운명상담소</div>
+            <div style="font-size:10px;color:${C.textDim};margin-top:4px">그 남 그 녀의 인연의 실을 꿰어드립니다</div>
+            <div style="font-size:9px;color:${C.textDim};letter-spacing:4px;margin-top:4px">◆◆◆◆◆◆◆</div>
+        </div>
+        ${renderDivider('궁합 기록', C.purple)}
+        ${recs}
+        <button id="cl-madame-new" style="width:100%;background:${C.purple}33;border:1px solid ${C.purple}88;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🔮 새 궁합 보기</button>
+    </div>`;
+
+    container.querySelectorAll('.cl-madame-rec').forEach(rec => rec.addEventListener('click', () => {
+        state.activeMadameId = rec.dataset.id; state.madameCompatView = 'result'; renderActivePane();
+    }));
+    container.querySelectorAll('.cl-madame-del').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const s = getSettings(); s.madameList = s.madameList.filter(m => m.id !== btn.dataset.id); save(); renderMadameCompat(container);
+    }));
+    container.querySelector('#cl-madame-new')?.addEventListener('click', () => { state.madameSetup={selected:[]}; state.madameCompatView='setup'; renderActivePane(); });
+}
+
+function renderMadameSetup(container) {
+    const settings = getSettings();
+    const { selected } = state.madameSetup;
+    const allowSame = settings.allowSameGender !== false;
+
+    const charRows = GENDER_SECTIONS.map(g => {
+        const group = settings.roster.filter(c => c.gender === g.id);
+        if (!group.length) return '';
+        return `<div style="margin-bottom:10px">
+            <div style="font-size:9px;color:${genderColor(g.id)};margin-bottom:6px;letter-spacing:2px">${g.label}</div>
+            ${group.map(char => {
+                const inSel = !!selected.find(c => c.id === char.id);
+                return `<div class="cl-madame-sel" data-id="${char.id}" style="background:${inSel?C.purple+'22':C.bgCard};border:2px solid ${inSel?C.purple:C.border};border-radius:2px;padding:9px 11px;cursor:pointer;display:flex;align-items:center;gap:9px;margin-bottom:5px">
+                    ${renderAvatar(char.name, char.gender, 32)}
+                    <div style="flex:1"><div style="font-size:12px;font-weight:700;color:${inSel?C.textBright:C.text}">${esc(char.name)}</div><div style="font-size:10px;color:${C.textDim}">${esc(char.parsed?.job||'—')}</div></div>
+                    ${inSel?`<div style="color:${C.purple}">♥</div>`:''}
+                </div>`;
+            }).join('')}
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <button id="cl-ms-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
+            <span style="font-size:13px;font-weight:700;color:${C.purple}">궁합 설정</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:11px 13px;margin-bottom:14px">
+            <div><div style="font-size:12px;color:${C.textBright};font-weight:700">동성 커플 허용</div><div style="font-size:10px;color:${C.textDim};margin-top:2px">OFF시 동성은 관계 궁합으로 분석</div></div>
+            <div id="cl-same-toggle" style="width:44px;height:24px;border-radius:12px;background:${allowSame?C.purple:'#2a1e12'};border:1px solid ${allowSame?C.purple:C.border};cursor:pointer;position:relative;transition:all.2s">
+                <div style="position:absolute;top:2px;left:${allowSame?'22':'2'}px;width:18px;height:18px;background:${allowSame?'#fff':C.textDim};border-radius:50%;transition:left.2s"></div>
+            </div>
+        </div>
+        ${renderDivider('캐스트 선택 (2명 이상)', C.purple)}
+        ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:12px 0">등록된 캐릭터 없음</div>`}
+        ${selected.length >= 2 ? `
+        <div style="background:${C.bgCard};border:1px solid ${C.purple}44;border-radius:2px;padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            ${selected.map((c,i) => `${i>0?`<span style="color:${C.purple}">♥</span>`:''}${renderAvatar(c.name,c.gender,22)}<span style="font-size:11px;color:${C.textBright}">${esc(c.name)}</span>`).join('')}
+            ${selected.length>=3?`<div style="font-size:10px;color:${C.purple};width:100%;margin-top:4px">▲ ${selected.length}명 — 삼각/다각 구도 분석</div>`:''}
+        </div>` : ''}
+        <button id="cl-madame-go" ${selected.length<2?'disabled':''} style="width:100%;background:${selected.length>=2?C.purple+'33':'#2a1e12'};border:1px solid ${selected.length>=2?C.purple:C.border};border-radius:2px;padding:9px;cursor:${selected.length>=2?'pointer':'not-allowed'};color:${selected.length>=2?C.purple:C.textDim};font-size:12px;font-weight:700">
+            ${selected.length<2?`${Math.max(0,2-selected.length)}명 더 선택 필요`:`🔮 ${selected.length}명 궁합 보기`}
+        </button>
+    </div>`;
+
+    container.querySelector('#cl-ms-back')?.addEventListener('click', () => { state.madameCompatView='list'; renderActivePane(); });
+    container.querySelector('#cl-same-toggle')?.addEventListener('click', () => { const s=getSettings(); s.allowSameGender=!s.allowSameGender; save(); renderMadameSetup(container); });
+    container.querySelectorAll('.cl-madame-sel').forEach(el => el.addEventListener('click', () => {
+        const char = getSettings().roster.find(c => c.id === el.dataset.id);
+        if (!char) return;
+        const idx = state.madameSetup.selected.findIndex(c => c.id === el.dataset.id);
+        if (idx >= 0) state.madameSetup.selected.splice(idx, 1); else state.madameSetup.selected.push(char);
+        renderMadameSetup(container);
+    }));
+    container.querySelector('#cl-madame-go')?.addEventListener('click', async () => {
+        const { selected } = state.madameSetup;
+        if (selected.length < 2) return;
+        showLoading(null, 'compat');
+        try {
+            const compatText = await runCompatPrompt(selected, getSettings().allowSameGender);
+            const scoreM = compatText.match(/총점[：:]\s*(\d+)/), typeM = compatText.match(/커플 유형[：:]\s*(.+)/);
+            const score = scoreM ? parseInt(scoreM[1]) : Math.floor(50 + Math.random() * 50);
+            const type = typeM ? typeM[1].trim() : '운명의 인연';
+            const session = { id:'madame_'+Date.now(), cast:selected.map(c=>c.name), castIds:selected.map(c=>c.id), allowSame:getSettings().allowSameGender, createdAt:new Date().toLocaleDateString('ko').slice(2).replace(/\. /g,'.'), compat:{score,type,triangle:selected.length===3,poly:selected.length>3,resultText:compatText}, scenarios:null };
+            const s = getSettings(); s.madameList.unshift(session); save();
+            hideLoading();
+            state.activeMadameId = session.id; state.madameCompatView = 'result'; renderActivePane();
+        } catch (e) { hideLoading(); toastr.error(`궁합 분석 실패: ${e.message}`); }
+    });
+}
+
+function renderMadameResult(container) {
+    const settings = getSettings();
+    const session = settings.madameList.find(m => m.id === state.activeMadameId);
+    if (!session) { state.madameCompatView='list'; renderActivePane(); return; }
+    const cast = session.castIds
+        ? session.castIds.map(id => settings.roster.find(c => c.id === id)).filter(Boolean)
+        : session.cast.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
+    const compat = session.compat || {};
+    const resultText = compat.resultText || '';
+
+    function parseSection(text, icon) {
+        const escaped = icon.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+        const m = text.match(new RegExp(escaped + '[^
+]*
+([\s\S]*?)(?=📊|💘|⚡|🎭|💑|🔺|🔥|✨|$)', 'u'));
+        return m ? m[1].trim() : '';
+    }
+    const scoreSection = parseSection(resultText, '📊');
+    const dynamicSection = parseSection(resultText, '⚡');
+    const genreSection = parseSection(resultText, '🎭');
+    const deepSection = parseSection(resultText, '💑');
+    const triSection = parseSection(resultText, '🔺');
+    const sceneSection = parseSection(resultText, '🔥');
+    const kinkSection = parseSection(resultText, '🔞');
+
+    const scoreLines = scoreSection.split('
+').filter(l => l.trim() && (l.includes(':') || l.includes('：')));
+    const scoreItems = scoreLines.map(line => {
+        const m = line.match(/(.+?)[：:]\s*(\d+)/);
+        if (!m) return '';
+        const pct = Math.min(100, parseInt(m[2]));
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div style="width:80px;font-size:11px;color:${C.text};flex-shrink:0">${esc(m[1].trim())}</div>
+            <div style="flex:1;height:6px;background:${C.bgDeep};border-radius:1px;overflow:hidden">
+                <div style="width:${pct}%;height:100%;background:${C.purple}"></div>
+            </div>
+            <div style="width:28px;font-size:12px;color:${C.purple};font-weight:900;font-family:monospace;text-align:right">${m[2]}</div>
+        </div>`;
+    }).join('');
+
+    const scoreColor = compat.score >= 70 ? C.gold : compat.score >= 45 ? C.accent : '#a05050';
+
+    container.innerHTML = `
+    <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:14px;text-align:center;position:relative">
+        <button id="cl-mr-back" style="position:absolute;top:14px;left:14px;background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px">◀ 목록</button>
+        <div style="font-size:10px;color:${C.textDim};letter-spacing:2px;margin-bottom:6px">✦ 운명의 실이 열려 있도다 ✦</div>
+        <div style="display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap">
+            ${cast.map((c,i) => `${i>0?`<span style="color:${C.purple}">♥</span>`:''}${renderAvatar(c.name,c.gender,28)}<span style="font-size:12px;color:${C.textBright};font-weight:700">${esc(c.name)}</span>`).join('')}
+        </div>
+        ${compat.triangle?`<div style="margin-top:6px;font-size:11px;color:${C.purple}">🔺 삼각관계의 기운이 감돌도다</div>`:compat.poly?`<div style="margin-top:6px;font-size:11px;color:${C.purple}">💫 다각의 인연이로다</div>`:''}
+    </div>
+    <div style="padding:14px">
+        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:18px;text-align:center;margin-bottom:12px">
+            <div style="font-size:10px;color:${C.textDim};letter-spacing:2px;margin-bottom:8px">이 인연의 점괘는...</div>
+            <div style="font-size:54px;font-weight:900;color:${scoreColor};font-family:monospace;line-height:1">${compat.score}</div>
+            <div style="font-size:9px;color:${C.textDim};margin-top:4px">/ 100점</div>
+            <div style="font-size:13px;font-weight:700;color:${C.textBright};margin-top:8px">「${esc(compat.type)}」</div>
+        </div>
+        ${renderAccordion('📊','항목별 궁합 점수','각 기운의 수치를 보여드리리다', scoreItems || `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(scoreSection)}</div>`)}
+        ${renderAccordion('⚡','관계의 기운','쫓는 자와 도망치는 자의 인연...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(dynamicSection)}</div>`)}
+        ${renderAccordion('🎭','예상 장르 TOP 3','이 인연에 가장 잘 어울리는 이야기...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(genreSection)}</div>`)}
+        ${renderAccordion('💑','궁합 심층 분석','잘 어울리는 점 · 충돌 · 장기 전망', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(deepSection)}</div>`)}
+        ${compat.triangle||compat.poly ? renderAccordion('🔺','다각 구도 분석','키맨은 누구인가?', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(triSection)}</div>`) : ''}
+        ${kinkSection ? renderAccordion('🔞','성향 궁합','탄크/성향의 궁합...', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(kinkSection)}</div>`) : ''}
+        ${renderAccordion('🔥','터질 것 같은 명장면 TOP 3','반드시 일어날 씬들이 보이는도다', `<div style="padding-top:10px;font-size:12px;color:${C.text};line-height:2;white-space:pre-wrap">${esc(sceneSection)}</div>`)}
+        <div style="margin-top:4px">
+            ${renderDivider('롤플 시나리오 추천', C.purple)}
+            <div id="cl-scenario-area">${session.scenarios ? renderScenarioCards(session.scenarios) : `<button id="cl-gen-scenarios" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">📖 시나리오 생성</button>`}</div>
+        </div>
+    </div>`;
+
+    container.querySelector('#cl-mr-back')?.addEventListener('click', () => { state.madameCompatView='list'; renderActivePane(); });
+    container.querySelectorAll('.cl-accordion-header').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('open')));
+    container.querySelector('#cl-gen-scenarios')?.addEventListener('click', async () => {
+        container.querySelector('#cl-scenario-area').innerHTML = `<div style="text-align:center;padding:20px;color:${C.textDim};font-size:12px">🔮 시나리오를 엮는 중...</div>`;
+        try {
+            const t = await runScenarioPrompt(cast, compat.resultText);
+            session.scenarios = t; save();
+            container.querySelector('#cl-scenario-area').innerHTML = renderScenarioCards(t);
+            bindScenarioEvents(container);
+        } catch (e) { container.querySelector('#cl-scenario-area').innerHTML = `<div style="color:#a05050;font-size:12px">실패: ${esc(e.message)}</div>`; }
+    });
+    bindScenarioEvents(container);
+}
+
+function renderScenarioCards(text) {
+    const blocks = text.split(/◆ 시나리오 \d+/).filter(b => b.trim());
+    if (!blocks.length) return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:13px;white-space:pre-wrap;font-size:12px;color:${C.text};line-height:1.9">${esc(text)}</div>`;
+    return blocks.map((block, i) => {
+        const gM = block.match(/장르[：:]\s*(.+)/), tM = block.match(/제목[：:]\s*"?(.+?)"?
+/);
+        const genre = gM ? gM[1].trim() : `시나리오 ${i+1}`, title = tM ? tM[1].trim() : '';
+        return `<div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:13px;margin-bottom:8px" data-idx="${i}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+                <div>
+                    <div style="font-size:10px;color:${C.purple};letter-spacing:1px">◆ ${esc(genre)}</div>
+                    <div style="font-size:13px;font-weight:700;color:${C.textBright};line-height:1.4;margin-top:4px">${esc(title)}</div>
+                </div>
+                <button class="cl-pin-btn" data-idx="${i}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 8px;cursor:pointer;color:${C.textDim};font-size:10px;white-space:nowrap">📌 고정</button>
+            </div>
+            <div style="font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap;border-top:1px solid ${C.border};padding-top:10px">${esc(block.trim())}</div>
+        </div>`;
+    }).join('') + `<button id="cl-reroll-scenarios" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:8px;cursor:pointer;color:${C.purple};font-size:11px;margin-top:4px">🔄 리롤</button>`;
+}
+
+function bindScenarioEvents(container) {
+    container.querySelectorAll('.cl-pin-btn').forEach(btn => btn.addEventListener('click', () => {
+        const isPinned = btn.closest('[data-idx]').classList.toggle('pinned');
+        btn.textContent = isPinned ? '📌 고정됨' : '📌 고정';
+        btn.style.color = isPinned ? C.purple : C.textDim;
+        btn.style.borderColor = isPinned ? C.purple : C.border;
+    }));
+    container.querySelector('#cl-reroll-scenarios')?.addEventListener('click', async () => {
+        const settings = getSettings(), session = settings.madameList.find(m => m.id === state.activeMadameId);
+        if (!session) return;
+        const cast = session.castIds ? session.castIds.map(id => settings.roster.find(c => c.id === id)).filter(Boolean) : session.cast.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
+        const area = container.querySelector('#cl-scenario-area');
+        area.innerHTML = `<div style="text-align:center;padding:20px;color:${C.textDim};font-size:12px">🔮 다시 엮는 중...</div>`;
+        try {
+            const t = await runScenarioPrompt(cast, session.compat?.resultText);
+            session.scenarios = t; save(); area.innerHTML = renderScenarioCards(t); bindScenarioEvents(container);
+        } catch (e) { area.innerHTML = `<div style="color:#a05050;font-size:12px">실패: ${esc(e.message)}</div>`; }
+    });
+}
+
+
 function renderMadameSaju(container) {
     const settings = getSettings();
     if (state.sajuView === 'result' && state.activeSajuId) { renderSajuResult2(container); return; }
@@ -1100,17 +1455,25 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
     }
 
     container.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
     <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border-bottom:1px solid #ffcc0044;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
         <button id="cl-fc-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀</button>
         <div style="font-size:13px;font-weight:700;color:#ffcc00;flex:1">${esc(room.title)}</div>
         <button id="cl-fc-refresh" title="채팅 다시 읽기" style="background:none;border:1px solid #ffcc0044;border-radius:2px;padding:3px 8px;cursor:pointer;color:#ffcc00;font-size:11px">🔄</button>
     </div>
-    <div id="cl-fc-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column">
-        ${room.baseContext === null && room.type === 'couple' ? `<div style="text-align:center;padding:20px;color:${C.textDim};font-size:11px">채팅방 정보를 불러오는 중...</div>` : renderMessages()}
+    <div id="cl-fc-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;min-height:0">
+        ${room.baseContext === null && room.type === 'couple'
+            ? `<div style="text-align:center;padding:30px;color:${C.textDim};font-size:11px">
+                <div style="font-size:24px;margin-bottom:10px">🔯</div>
+                MINE신을 모시는 중...<br>
+                <span style="font-size:10px;opacity:0.6">채팅방 정보를 읽어오고 있습니다</span>
+               </div>`
+            : renderMessages()}
     </div>
-    <div style="padding:10px 14px;border-top:1px solid ${C.border};display:flex;gap:8px;flex-shrink:0">
-        <textarea id="cl-fc-input" rows="2" placeholder="챗씨부인에게 물어보세요..." style="flex:1;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;outline:none;resize:none;line-height:1.6"></textarea>
-        <button id="cl-fc-send" style="background:#ffcc0033;border:1px solid #ffcc0088;border-radius:2px;padding:8px 12px;cursor:pointer;color:#ffcc00;font-size:18px">↑</button>
+    <div style="padding:10px 14px;border-top:1px solid ${C.border};display:flex;gap:8px;flex-shrink:0;background:${C.bgDeep}">
+        <textarea id="cl-fc-input" rows="2" placeholder="챗씨부인에게 물어보세요..." style="flex:1;background:${C.bg};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;outline:none;resize:none;line-height:1.6"></textarea>
+        <button id="cl-fc-send" style="background:#ffcc0033;border:1px solid #ffcc0088;border-radius:2px;padding:8px 12px;cursor:pointer;color:#ffcc00;font-size:18px;flex-shrink:0">↑</button>
+    </div>
     </div>`;
 
     // 커플방 baseContext 없으면 로딩
@@ -1119,15 +1482,21 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
             const slot = getPromptSlot('fortuneBase');
             const baseRaw = await callAIFortune(slot.user, slot.system);
             room.baseContext = stripInfoBlocks(baseRaw);
-            // 첫 인사
+            // 첫 인사 — 짧게
             const greetSlot = getPromptSlot('fortuneChat');
             const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext);
-            const greet = await callAI('처음 오셨네요. 첫 인사를 해주세요.', greetSystem);
+            const greet = await callAI(
+                '첫 인사. 한두 문장으로 짧게. 이미 다 꿰고 있다는 느낌으로. "왔어요?" 같은 무심한 시작.',
+                greetSystem
+            );
             room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
             const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
             if (target) { target.baseContext = room.baseContext; target.messages = room.messages; save(); }
             renderFortuneChatRoom(container, roomId, false);
-        } catch (e) { toastr.error('기반 정보 로딩 실패'); }
+        } catch (e) {
+            const msgEl = container.querySelector('#cl-fc-messages');
+            if (msgEl) msgEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:20px;text-align:center">로딩 실패: ${esc(e.message)}<br><button onclick="renderFortune(this.closest('#scouter-float').querySelector('.cl-pane.active'))" style="margin-top:8px;background:none;border:1px solid #664444;padding:5px 10px;cursor:pointer;color:#aa6666;font-size:11px;border-radius:2px">← 뒤로</button></div>`;
+        }
         return;
     }
 
@@ -1135,13 +1504,17 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
     if (room.type === 'personal' && room.messages.length === 0) {
         try {
             const greetSlot = getPromptSlot('fortuneChat');
-            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '');
-            const greet = await callAI('처음 오셨네요. 내담자 정보를 보고 첫 인사를 해주세요.', greetSystem);
+            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '') +
+                '\n\n[중요] 개인 상담방이다. 맹신 유도 금지. 공감 위주, 긍정적으로 해석. 좋은 방향으로 이야기를 돌려야 한다.';
+            const greet = await callAI(
+                '첫 인사. 한두 문장. 무심하게 시작. 내담자 정보 봤다는 뉘앙스.',
+                greetSystem
+            );
             room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
             const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
             if (target) { target.messages = room.messages; save(); }
             renderFortuneChatRoom(container, roomId, false);
-        } catch (e) { toastr.error('첫 인사 실패'); }
+        } catch (e) { toastr.error('첫 인사 실패: ' + e.message); }
         return;
     }
 
@@ -1163,41 +1536,64 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
     const msgEl = container.querySelector('#cl-fc-messages');
     if (msgEl) msgEl.scrollTop = msgEl.scrollHeight;
 
+    function addBubble(role, content) {
+        if (!msgEl) return;
+        const div = document.createElement('div');
+        div.style.cssText = 'margin-bottom:12px';
+        if (role === 'user') {
+            div.innerHTML = `<div style="display:flex;justify-content:flex-end"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(content)}</div></div>`;
+        } else if (role === 'typing') {
+            div.id = 'cl-fc-typing';
+            div.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:12px 16px;font-size:18px;letter-spacing:4px;color:#ffcc00">
+                <span style="animation:scouter-dot 1s ease-in-out infinite">·</span>
+                <span style="animation:scouter-dot 1s ease-in-out 0.3s infinite">·</span>
+                <span style="animation:scouter-dot 1s ease-in-out 0.6s infinite">·</span>
+            </div></div>`;
+        } else if (role === 'error') {
+            div.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:#2a0a0a;border:1px solid #aa333344;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:11px;color:#cc6666;line-height:1.7">${esc(content)}</div></div>`;
+        } else {
+            div.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(content)}</div></div>`;
+        }
+        msgEl.appendChild(div);
+        msgEl.scrollTop = msgEl.scrollHeight;
+    }
+
     const send = async () => {
         const input = container.querySelector('#cl-fc-input');
+        const sendBtn = container.querySelector('#cl-fc-send');
         const text = input?.value?.trim();
-        if (!text) return;
+        if (!text || sendBtn?.disabled) return;
         input.value = '';
+        sendBtn.disabled = true;
+        sendBtn.style.opacity = '0.4';
 
+        addBubble('user', text);
         room.messages.push({ role: 'user', content: text });
+
         const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
         if (target) { target.messages = room.messages; save(); }
 
-        // 메시지 업데이트
-        if (msgEl) {
-            msgEl.innerHTML = (room.messages||[]).map(m => m.role === 'user'
-                ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(m.content)}</div></div>`
-                : `<div style="display:flex;gap:10px;margin-bottom:12px"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(m.content)}</div></div>`
-            ).join('') + `<div style="text-align:center;padding:10px;color:${C.textDim};font-size:11px">...</div>`;
-            msgEl.scrollTop = msgEl.scrollHeight;
-        }
+        addBubble('typing', '');
 
         try {
             const slot = getPromptSlot('fortuneChat');
             const system = slot.system.replace('{{baseContext}}', room.baseContext || '');
-            const historyMsgs = (room.messages||[]).slice(-20).map(m => ({ role: m.role, content: m.content }));
+            // callAI 방식 — system을 첫 메시지로 주입, 이후 히스토리
+            const historyMsgs = (room.messages||[]).slice(-20);
             const response = await callAIWithHistory(system, historyMsgs);
-            const cleaned = filterPhoneTrigger(response);
+            const cleaned = filterPhoneTrigger(response || '(응답 없음)');
             room.messages.push({ role: 'assistant', content: cleaned });
             if (target) { target.messages = room.messages; save(); }
-            if (msgEl) {
-                msgEl.innerHTML = (room.messages||[]).map(m => m.role === 'user'
-                    ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(m.content)}</div></div>`
-                    : `<div style="display:flex;gap:10px;margin-bottom:12px"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(m.content)}</div></div>`
-                ).join('');
-                msgEl.scrollTop = msgEl.scrollHeight;
-            }
-        } catch (e) { toastr.error(`실패: ${e.message}`); }
+            container.querySelector('#cl-fc-typing')?.remove();
+            addBubble('assistant', cleaned);
+        } catch (e) {
+            container.querySelector('#cl-fc-typing')?.remove();
+            const errMsg = `연결 실패: ${e.message || '알 수 없는 오류'}`;
+            addBubble('error', errMsg);
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.style.opacity = '1';
+        }
     };
 
     container.querySelector('#cl-fc-send')?.addEventListener('click', send);
@@ -1220,31 +1616,163 @@ async function callAIWithHistory(system, messages) {
     const ctx = SillyTavern.getContext();
     const settings = getSettings();
     const profileName = settings.selectedProfileName || null;
+
+    // 히스토리 조립: system을 첫 user 메시지로, 이후 대화
+    const buildMsgs = (sys, msgs) => {
+        const result = [];
+        // system을 첫 user/assistant 쌍으로
+        result.push({ role: 'user', content: sys });
+        result.push({ role: 'assistant', content: '알겠습니다. 챗씨부인으로서 대화를 이어가겠습니다.' });
+        // 실제 대화 히스토리
+        for (const m of msgs) {
+            result.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content });
+        }
+        return result;
+    };
+
     if (profileName && ctx.ConnectionManagerRequestService) {
         const profiles = ctx.extensionSettings?.['connectionManager']?.profiles || [];
         const profile = profiles.find(p => p.name === profileName);
         if (profile) {
-            const msgs = [{ role: 'user', content: system + '\n\n아래 대화를 이어가세요.' }, ...messages];
-            const response = await ctx.ConnectionManagerRequestService.sendRequest(
-                profile.id, msgs, settings.maxTokens || 4000,
-                { stream: false, extractData: true, includePreset: true, includeInstruct: false }
-            );
-            let raw = '';
-            if (typeof response === 'string') raw = response;
-            else if (response?.choices?.[0]?.message?.content) raw = response.choices[0].message.content;
-            else if (response?.content?.[0]?.text) raw = response.content[0].text;
-            return filterPhoneTrigger(raw);
+            try {
+                const msgs = buildMsgs(system, messages);
+                const response = await ctx.ConnectionManagerRequestService.sendRequest(
+                    profile.id, msgs, settings.maxTokens || 4000,
+                    { stream: false, extractData: true }
+                );
+                let raw = '';
+                if (typeof response === 'string') raw = response;
+                else if (response?.choices?.[0]?.message?.content) raw = response.choices[0].message.content;
+                else if (response?.content?.[0]?.text) raw = response.content[0].text;
+                else if (response?.responseContent) raw = response.responseContent;
+                if (raw) return filterPhoneTrigger(raw);
+            } catch(e) { console.warn('[챗씨부인] profile call failed, falling back:', e.message); }
         }
     }
+
+    // 폴백: generateRaw — 히스토리를 텍스트로 합쳐서 프롬프트로
     const { generateRaw } = ctx;
-    const lastMsg = messages[messages.length - 1]?.content || '';
-    const result = await generateRaw({ systemPrompt: system, prompt: lastMsg });
+    const histText = messages.slice(-10).map(m =>
+        `${m.role === 'user' ? '[손님]' : '[챗씨부인]'}: ${m.content}`
+    ).join('\n\n');
+    const prompt = `${system}\n\n=== 대화 기록 ===\n${histText}\n\n[챗씨부인]:`;
+    const result = await generateRaw({ prompt });
     return filterPhoneTrigger(result || '');
 }
 
 
 
-function renderSettings(container) {
+// ═══════════════════════════════════════════
+// 오늘의 운세 (점괘 서브탭)
+// ═══════════════════════════════════════════
+const FORTUNE_INJECT_KEY = 'chatssibuin_daily_fortune';
+
+function injectFortune(text) {
+    const ctx = SillyTavern.getContext();
+    ctx.setExtensionPrompt(FORTUNE_INJECT_KEY, `[오늘의 운세 - MINE신의 계시]\n${text}`, 'after_scenario', 0);
+    save();
+}
+
+function clearFortune() {
+    const ctx = SillyTavern.getContext();
+    ctx.setExtensionPrompt(FORTUNE_INJECT_KEY, '', 'after_scenario', 0);
+    const s = getSettings();
+    s.dailyFortune = null;
+    s.dailyFortuneInjected = false;
+    save();
+}
+
+async function generateDailyFortune() {
+    const ctx = SillyTavern.getContext();
+    const char = ctx.characters?.[ctx.characterId];
+    const charName = char?.name || '캐릭터';
+
+    const prompt = `오늘의 운세를 봐줘. 대상: ${charName}.
+
+MINE신이 오늘 이 인물에게 내린 운세를 재밌고 구체적으로 알려줘.
+딱딱하지 않게, 웃기면서도 그럴듯하게.
+각 항목 한 줄씩:
+
+오늘의 총운:
+금전운:
+연애운:
+건강운:
+오늘의 행운의 아이템:
+오늘 주의할 것:
+MINE신의 한마디:
+
+짧고 임팩트 있게. 각 항목 15자 이내.`;
+
+    return await callAI(prompt, `당신은 챗씨부인, 젊은 여성 무당. MINE신의 계시를 받아 오늘의 운세를 봐준다. 
+재밌고 구체적으로, 너무 진지하지 않게. 가끔 웃긴 운도 섞어. 한국어로.`);
+}
+
+function renderDailyFortune(container) {
+    const settings = getSettings();
+    const injected = settings.dailyFortuneInjected || false;
+    const fortune = settings.dailyFortune || null;
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="background:linear-gradient(180deg,#1a1000,#0d0800);border:1px solid #ffcc0066;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px">
+            <div style="font-size:15px;font-weight:700;color:#ffcc00">☀️ 오늘의 운세</div>
+            <div style="font-size:10px;color:#886633;margin-top:4px">MINE신이 오늘 하루를 점쳐드립니다</div>
+            <div style="font-size:9px;color:#664422;margin-top:4px">⚠️ 재미로 보는 운세입니다</div>
+        </div>
+
+        ${fortune ? `
+        <div style="background:#0a0800;border:1px solid #ffcc0044;border-radius:2px;padding:14px;margin-bottom:12px;font-size:12px;color:#ffcc88;line-height:2;white-space:pre-wrap">${esc(fortune)}</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="cl-fortune-inject" style="flex:1;background:${injected?'#00440022':'#ffcc0022'};border:1px solid ${injected?'#00aa44':'#ffcc0088'};border-radius:2px;padding:8px;cursor:pointer;color:${injected?'#44cc88':'#ffcc00'};font-size:11px;font-weight:700">
+                ${injected ? '✅ 롤플에 주입 중' : '📌 롤플에 주입'}
+            </button>
+            ${injected ? `<button id="cl-fortune-uninject" style="flex:1;background:none;border:1px solid #664422;border-radius:2px;padding:8px;cursor:pointer;color:#aa6644;font-size:11px">주입 해제</button>` : ''}
+        </div>
+        <button id="cl-fortune-regen" style="width:100%;background:none;border:1px solid #664422;border-radius:2px;padding:8px;cursor:pointer;color:#886633;font-size:11px">🔄 다시 뽑기</button>
+        ` : `
+        <button id="cl-fortune-gen" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0088;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700">
+            ☀️ 오늘의 운세 보기
+        </button>
+        `}
+
+        ${injected ? `
+        <div style="background:#001a0a;border:1px solid #00aa4444;border-radius:2px;padding:10px;margin-top:10px;font-size:10px;color:#44cc88">
+            ✅ 현재 롤플 컨텍스트에 주입 중 — 사건이 일어날 때까지 유지됩니다
+        </div>` : ''}
+    </div>`;
+
+    const gen = async (btn) => {
+        if (btn) { btn.textContent = 'MINE신을 부르는 중...'; btn.disabled = true; }
+        try {
+            const text = await generateDailyFortune();
+            const s = getSettings();
+            s.dailyFortune = text;
+            save();
+            renderDailyFortune(container);
+        } catch(e) {
+            toastr.error(`운세 생성 실패: ${e.message}`);
+            if (btn) { btn.textContent = '☀️ 오늘의 운세 보기'; btn.disabled = false; }
+        }
+    };
+
+    container.querySelector('#cl-fortune-gen')?.addEventListener('click', e => gen(e.target));
+    container.querySelector('#cl-fortune-regen')?.addEventListener('click', e => gen(e.target));
+
+    container.querySelector('#cl-fortune-inject')?.addEventListener('click', () => {
+        if (injected) return;
+        injectFortune(fortune);
+        const s = getSettings(); s.dailyFortuneInjected = true; save();
+        renderDailyFortune(container);
+        toastr.success('롤플 컨텍스트에 운세 주입됨');
+    });
+
+    container.querySelector('#cl-fortune-uninject')?.addEventListener('click', () => {
+        clearFortune();
+        renderDailyFortune(container);
+        toastr.success('운세 주입 해제됨');
+    });
+}
+
+// ═══════════════════════════════════════════
     const settings = getSettings();
     const { extensionSettings } = SillyTavern.getContext();
     const currentProfile = settings.selectedProfileName || '현재 연결 그대로';
@@ -1352,16 +1880,18 @@ function injectCSS() {
 .cl-pulse-purple { animation: cl-pulse-purple 2s ease-in-out infinite; }
 
 @media (max-width: 600px) {
-    #scouter-float:not(.fortune-mode) {
-        width: 100vw !important; height: 100dvh !important;
-        top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-        border-radius: 0 !important; resize: none !important;
+    #scouter-float {
+        width: min(400px, 95vw) !important;
+        height: 85dvh !important;
+        top: 5dvh !important;
+        left: 50% !important;
+        transform: translateX(-50%);
+        right: auto !important;
+        min-width: 280px !important;
+        min-height: 320px !important;
     }
-    #scouter-float.fortune-mode {
-        width: min(420px, 95vw) !important;
-        resize: both !important;
-    }
-    #cl-content { overflow-y: scroll !important; -webkit-overflow-scrolling: touch; }
+    #scouter-resize { width: 28px !important; height: 28px !important; font-size: 18px !important; opacity: 0.8 !important; }
+    #cl-content { overflow-y: scroll !important; -webkit-overflow-scrolling: touch; } }
 }
     `;
     document.head.appendChild(style);
