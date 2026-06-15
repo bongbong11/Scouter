@@ -1766,67 +1766,7 @@ function renderDailyFortune(container) {
 }
 
 // ═══════════════════════════════════════════
-    const settings = getSettings();
-    const { extensionSettings } = SillyTavern.getContext();
-    const currentProfile = settings.selectedProfileName || '현재 연결 그대로';
-    const devUnlocked = settings.devUnlocked || false;
-
-    container.innerHTML = `<div style="padding:14px">
-        ${renderDivider('연결 프로필', C.accent)}
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:11px 13px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
-            <span style="font-size:18px">🔌</span>
-            <div style="flex:1">
-                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(currentProfile)}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">확장 탭 설정에서 변경 가능</div>
-            </div>
-        </div>
-
-        ${renderDivider('AI 설정', C.accent)}
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:12px;margin-bottom:14px">
-            <div style="display:flex;align-items:center;gap:10px">
-                <div style="flex:1">
-                    <div style="font-size:12px;color:${C.text};margin-bottom:4px">최대 토큰 수</div>
-                    <div style="font-size:10px;color:${C.textDim}">사주/궁합 등 긴 답변이 잘리면 늘려보세요</div>
-                </div>
-                <input id="cl-max-tokens" type="number" min="1000" max="32000" step="1000" value="${settings.maxTokens || 4000}" style="width:80px;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:6px 8px;color:${C.text};font-size:13px;font-family:monospace;outline:none;text-align:center">
-            </div>
-        </div>
-
-        ${renderDivider('저장 현황', C.accent)}
-        <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:14px;margin-bottom:14px">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
-                <div><div style="font-size:20px;font-weight:900;color:${C.female};font-family:monospace;text-shadow:0 0 8px ${C.female}88">${settings.roster.length}</div><div style="font-size:9px;color:${C.textDim}">캐릭터</div></div>
-                <div><div style="font-size:20px;font-weight:900;color:#ff2200;font-family:monospace;text-shadow:0 0 8px #ff220088">${settings.battleList.length}</div><div style="font-size:9px;color:${C.textDim}">배틀</div></div>
-                <div><div style="font-size:20px;font-weight:900;color:${C.purple};font-family:monospace;text-shadow:0 0 8px ${C.purple}88">${settings.madameList.length}</div><div style="font-size:9px;color:${C.textDim}">궁합</div></div>
-                <div><div style="font-size:20px;font-weight:900;color:#cc44ff;font-family:monospace;text-shadow:0 0 8px #cc44ff88">${(settings.simList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">시뮬</div></div>
-                <div><div style="font-size:20px;font-weight:900;color:${C.gold};font-family:monospace;text-shadow:0 0 8px ${C.gold}88">${(settings.sajuList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">사주</div></div>
-            </div>
-            <button id="cl-clear-all" style="width:100%;background:none;border:1px solid #550033;border-radius:2px;padding:8px;cursor:pointer;color:#aa4466;font-size:11px">🗑 전체 데이터 삭제</button>
-        </div>
-
-        <div style="text-align:center;font-size:9px;color:${C.textDim};padding-top:8px;border-top:1px solid ${C.border}">
-            Scouter v2.0 · 챗씨부인운명상담소
-        </div>
-    </div>`;
-
-    container.querySelector('#cl-max-tokens')?.addEventListener('change', e => {
-        const val = parseInt(e.target.value);
-        if (val >= 1000 && val <= 32000) {
-            const s = getSettings(); s.maxTokens = val; save();
-            toastr.success(`최대 토큰 ${val}으로 설정됨`);
-        }
-    });
-
-    // 전체 삭제
-    container.querySelector('#cl-clear-all')?.addEventListener('click', async () => {
-        const { Popup, POPUP_RESULT } = SillyTavern.getContext();
-        const confirmed = await Popup.show.confirm('전체 삭제', '모든 캐릭터, 배틀, 궁합, 사주 데이터를 삭제합니다. 복구 불가.');
-        if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
-            const s = getSettings(); s.roster=[]; s.madameList=[]; s.sajuList=[]; s.fortuneRooms=[]; s.dailyFortune=null; s.dailyFortuneInjected=false; save();
-            toastr.success('전체 삭제 완료'); renderSettings(container);
-        }
-    });
-
+// (구 설정 - 삭제됨, 새 renderSettings는 아래에)
 // ═══════════════════════════════════════════
 // 설정
 // ═══════════════════════════════════════════
