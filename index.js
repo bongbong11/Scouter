@@ -40,7 +40,7 @@ import { PROMPT_META, DEFAULT_PROMPTS } from './prompts.js';
 // 기본 설정
 // ═══════════════════════════════════════════
 const defaultSettings = {
-    roster: [], battleList: [], madameList: [], sajuList: [],
+    roster: [], battleList: [], madameList: [], sajuList: [], simList: [],
     allowSameGender: false, selectedProfileName: null, fortuneProfileName: null,
     devUnlocked: false, prompts: null, maxTokens: 4000,
 };
@@ -60,11 +60,11 @@ let state = {
     battleSetup: { selected: [], condition: '' },
     battleLang: 'ko',
     simLang: 'ko',
+    simView: 'list',
+    activeSimId: null,
     madameSetup: { selected: [] },
     simSetup: { selected: [], situation: '' },
-    simResult: null,
-    simTranslated: null,
-    sajuView: 'list',   // 'list' | 'setup' | 'result'
+    sajuView: 'list',
     sajuCharId: null,
     activeSajuId: null,
     isPanelOpen: false,
@@ -84,6 +84,51 @@ function getSettings() {
 }
 function save() { SillyTavern.getContext().saveSettingsDebounced(); }
 function getRank(t) { return RANK_THRESHOLDS.find(r => t >= r.min) || RANK_THRESHOLDS[RANK_THRESHOLDS.length - 1]; }
+
+function getCharLabel(stats) {
+    const { combat, roast, sex, mental, charisma } = stats;
+    const total = combat + roast + sex + mental + charisma;
+    const avg = total / 5;
+
+    // 고르게 높거나 낮은 경우
+    const vals = [combat, roast, sex, mental, charisma];
+    const max = Math.max(...vals);
+    const min = Math.min(...vals);
+    const spread = max - min;
+
+    if (spread < 15) {
+        if (avg >= 80) return '완성형 인간';
+        if (avg >= 60) return '위험한 전인';
+        if (avg >= 40) return '평범한 일상인';
+        return '숨어있는 가능성';
+    }
+
+    // 1위 스탯 찾기
+    const entries = { combat, roast, sex, mental, charisma };
+    const top = Object.entries(entries).sort((a, b) => b[1] - a[1])[0][0];
+    const topVal = entries[top];
+    const high = topVal >= 80;
+
+    switch (top) {
+        case 'combat':
+            if (high) return topVal >= 90 ? '살아있는 무기' : '전장의 포식자';
+            return topVal >= 60 ? '거친 싸움꾼' : '몸으로 말하는 타입';
+        case 'roast':
+            if (high) return topVal >= 90 ? '말로 죽이는 타입' : '냉혹한 조율사';
+            return topVal >= 60 ? '날 선 혀끝' : '말빨 하나는 확실한';
+        case 'sex':
+            if (high) return topVal >= 90 ? '존재 자체가 위험' : '치명적 유혹자';
+            return topVal >= 60 ? '무심한 자석' : '모르는 척하는 매력';
+        case 'mental':
+            if (high) return topVal >= 90 ? '감정 없는 기계' : '흔들리지 않는 벽';
+            return topVal >= 60 ? '냉정한 관찰자' : '속 알 수 없는 타입';
+        case 'charisma':
+            if (high) return topVal >= 90 ? '공간을 삼키는 존재' : '그림자 실세';
+            return topVal >= 60 ? '자연스러운 리더' : '은근히 중심 잡는 타입';
+        default:
+            return '정체불명';
+    }
+}
 function getTotal(c) { return Object.values(c.stats || {}).reduce((a, b) => a + b, 0); }
 function avatarHue(n) { return [...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 360; }
 function genderColor(g) { return g === 'female' ? '#c87070' : '#7090b8'; }
@@ -1246,6 +1291,42 @@ function bindScenarioEvents(container) {
 // 챗씨부인 — 시뮬
 // ═══════════════════════════════════════════
 function renderMadameSim(container) {
+    if (state.simView === 'result' && state.activeSimId) { renderSimResult(container); return; }
+    if (state.simView === 'setup') { renderSimSetup(container); return; }
+
+    // 목록
+    const settings = getSettings();
+    const list = (settings.simList || []).map(s => `
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid ${C.purple};border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px" class="cl-sim-rec" data-id="${s.id}">
+            <div style="flex:1">
+                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(s.cast.join(' + '))}</div>
+                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(s.situation || '상황 없음')} · ${esc(s.createdAt || '')}</div>
+            </div>
+            <button class="cl-sim-del" data-id="${s.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
+        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">시뮬 기록 없음</div>`;
+
+    container.innerHTML = `<div style="padding:14px">
+        <div style="font-size:13px;font-weight:700;color:${C.purple};margin-bottom:12px">🎲 상황 시뮬레이터</div>
+        <div style="font-size:11px;color:${C.textDim};line-height:1.7;margin-bottom:14px">캐릭터들을 선택하고 상황을 입력하면, 로맨스/케미 관점으로 시뮬합니다.</div>
+        ${renderDivider('시뮬 기록', C.purple)}
+        ${list}
+        <button id="cl-sim-new" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🎲 새 시뮬</button>
+    </div>`;
+
+    container.querySelectorAll('.cl-sim-rec').forEach(rec => rec.addEventListener('click', () => {
+        state.activeSimId = rec.dataset.id; state.simView = 'result'; renderActivePane();
+    }));
+    container.querySelectorAll('.cl-sim-del').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const s = getSettings(); s.simList = (s.simList || []).filter(x => x.id !== btn.dataset.id); save();
+        renderMadameSim(container);
+    }));
+    container.querySelector('#cl-sim-new')?.addEventListener('click', () => {
+        state.simSetup = { selected: [], situation: '' }; state.simView = 'setup'; renderActivePane();
+    });
+}
+
+function renderSimSetup(container) {
     const settings = getSettings();
     const { selected, situation } = state.simSetup;
 
@@ -1266,8 +1347,11 @@ function renderMadameSim(container) {
     }).join('');
 
     container.innerHTML = `<div style="padding:14px">
-        <div style="font-size:13px;font-weight:700;color:${C.purple};margin-bottom:12px">🎲 상황 시뮬레이터</div>
-        <div style="font-size:11px;color:${C.textDim};line-height:1.7;margin-bottom:10px">캐릭터들을 선택하고 상황을 입력하면, 그 상황에서 어떻게 반응하고 전개될지 시뮬합니다.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <button id="cl-sim-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
+            <span style="font-size:13px;font-weight:700;color:${C.purple}">시뮬 설정</span>
+        </div>
+        ${renderDivider('출력 언어', C.purple)}
         <div style="display:flex;gap:8px;margin-bottom:14px">
             <button id="cl-sim-lang-ko" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${state.simLang==='ko'?C.purple+'33':'none'};border:${state.simLang==='ko'?`2px solid ${C.purple}`:`1px solid ${C.border}`};color:${state.simLang==='ko'?C.purple:C.textDim}">🇰🇷 한국어</button>
             <button id="cl-sim-lang-en" style="flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:12px;font-weight:700;background:${state.simLang==='en'?C.purple+'33':'none'};border:${state.simLang==='en'?`2px solid ${C.purple}`:`1px solid ${C.border}`};color:${state.simLang==='en'?C.purple:C.textDim}">🇺🇸 English</button>
@@ -1276,52 +1360,86 @@ function renderMadameSim(container) {
         ${charRows || `<div style="color:${C.textDim};font-size:12px;padding:10px 0">등록된 캐릭터 없음</div>`}
         ${renderDivider('상황', C.purple)}
         <textarea id="cl-sim-situation" rows="4" placeholder="예) 두 사람이 좁은 엘리베이터에 갇혔다.&#10;예) 회사 회식에서 마주쳤다." style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px">${esc(situation)}</textarea>
-        ${selected.length>=1?`<div style="background:${C.bgCard};border:1px solid ${C.purple}44;border-radius:2px;padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${selected.map((c,i)=>`${i>0?`<span style="color:${C.purple};font-size:12px">+</span>`:''}${renderAvatar(c.name,c.gender,22)}<span style="font-size:11px;color:${C.textBright}">${esc(c.name)}</span>`).join('')}</div>`:''}
-        <button id="cl-sim-go" ${selected.length<1?'disabled':''} style="width:100%;background:${selected.length>=1?C.purple+'33':'#2a1e12'};border:1px solid ${selected.length>=1?C.purple:C.border};border-radius:2px;padding:9px;cursor:${selected.length>=1?'pointer':'not-allowed'};color:${selected.length>=1?C.purple:C.textDim};font-size:12px;font-weight:700">${selected.length<1?'캐릭터를 선택하세요':'🎲 시뮬 시작'}</button>
-        ${state.simResult?`<div style="margin-top:16px">
-            ${renderDivider('시뮬 결과', C.purple)}
-            <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap;max-height:400px;overflow-y:auto">${esc(state.simTranslated || state.simResult)}</div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-                <button id="cl-sim-reroll" style="flex:1;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🔄 다시 시뮬</button>
-                ${!state.simTranslated ? `<button id="cl-sim-translate" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:9px;cursor:pointer;color:${C.textDim};font-size:11px">🌐 한국어 번역</button>` : `<button id="cl-sim-untranslate" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:9px;cursor:pointer;color:${C.textDim};font-size:11px">원문</button>`}
-            </div>
-        </div>`:''}
+        ${selected.length>=1?`<div style="background:${C.bgCard};border:1px solid ${C.purple}44;border-radius:2px;padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${selected.map((c,i)=>`${i>0?`<span style="color:${C.purple}">+</span>`:''}${renderAvatar(c.name,c.gender,22)}<span style="font-size:11px;color:${C.textBright}">${esc(c.name)}</span>`).join('')}</div>`:''}
+        <button id="cl-sim-go" ${selected.length<1?'disabled':''} style="width:100%;background:${selected.length>=1?C.purple+'33':'#0a000f'};border:1px solid ${selected.length>=1?C.purple:C.border};border-radius:2px;padding:9px;cursor:${selected.length>=1?'pointer':'not-allowed'};color:${selected.length>=1?C.purple:C.textDim};font-size:12px;font-weight:700">${selected.length<1?'캐릭터를 선택하세요':'🎲 시뮬 시작'}</button>
     </div>`;
 
-    container.querySelector('#cl-sim-lang-ko')?.addEventListener('click', () => { state.simLang='ko'; state.simTranslated=null; renderMadameSim(container); });
-    container.querySelector('#cl-sim-lang-en')?.addEventListener('click', () => { state.simLang='en'; state.simTranslated=null; renderMadameSim(container); });
-
+    container.querySelector('#cl-sim-back')?.addEventListener('click', () => { state.simView='list'; renderActivePane(); });
+    container.querySelector('#cl-sim-lang-ko')?.addEventListener('click', () => { state.simLang='ko'; renderSimSetup(container); });
+    container.querySelector('#cl-sim-lang-en')?.addEventListener('click', () => { state.simLang='en'; renderSimSetup(container); });
     container.querySelectorAll('.cl-sim-sel').forEach(el => el.addEventListener('click', () => {
         const char = getSettings().roster.find(c => c.id === el.dataset.id);
         if (!char) return;
         const idx = state.simSetup.selected.findIndex(c => c.id === el.dataset.id);
         if (idx >= 0) state.simSetup.selected.splice(idx, 1); else state.simSetup.selected.push(char);
-        renderMadameSim(container);
+        renderSimSetup(container);
     }));
     container.querySelector('#cl-sim-situation')?.addEventListener('input', e => state.simSetup.situation = e.target.value);
-    async function doSim() {
+    container.querySelector('#cl-sim-go')?.addEventListener('click', async () => {
         if (!state.simSetup.selected.length) return;
-        state.simTranslated = null;
         showLoading(null, 'sim');
         try {
             const r = await runSimPrompt(state.simSetup.selected, state.simSetup.situation, state.simLang);
-            hideLoading(); state.simResult = r; renderMadameSim(container);
-        } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); renderMadameSim(container); }
-    }
-    container.querySelector('#cl-sim-go')?.addEventListener('click', doSim);
-    container.querySelector('#cl-sim-reroll')?.addEventListener('click', () => { state.simTranslated = null; doSim(); });
-    container.querySelector('#cl-sim-translate')?.addEventListener('click', async () => {
-        const btn = container.querySelector('#cl-sim-translate');
+            hideLoading();
+            const session = {
+                id: 'sim_' + Date.now(),
+                cast: state.simSetup.selected.map(c => c.name),
+                castIds: state.simSetup.selected.map(c => c.id),
+                situation: state.simSetup.situation,
+                lang: state.simLang,
+                resultText: r,
+                translatedText: null,
+                createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.'),
+            };
+            const s = getSettings();
+            if (!s.simList) s.simList = [];
+            s.simList.unshift(session); save();
+            state.activeSimId = session.id; state.simView = 'result'; renderActivePane();
+        } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); }
+    });
+}
+
+function renderSimResult(container) {
+    const settings = getSettings();
+    const session = (settings.simList || []).find(s => s.id === state.activeSimId);
+    if (!session) { state.simView='list'; renderActivePane(); return; }
+    const displayText = session.translatedText || session.resultText || '';
+
+    container.innerHTML = `
+    <div style="background:${C.bgDeep};border-bottom:1px solid ${C.border};padding:10px 14px">
+        <button id="cl-simr-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;margin-bottom:8px;padding:0">◀ 목록</button>
+        <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(session.cast.join(' + '))}</div>
+        ${session.situation?`<div style="font-size:10px;color:${C.textDim};margin-top:4px;padding:5px 8px;background:${C.bgCard};border-radius:2px">📍 ${esc(session.situation)}</div>`:''}
+    </div>
+    <div style="padding:14px">
+        <div style="background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:13px;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(displayText)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="cl-simr-reroll" style="flex:1;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:8px;cursor:pointer;color:${C.purple};font-size:11px;font-weight:700">🔄 다시 시뮬</button>
+            ${!session.translatedText && session.lang==='en' ? `<button id="cl-simr-translate" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:8px;cursor:pointer;color:${C.textDim};font-size:11px">🌐 한국어 번역</button>` : ''}
+            ${session.translatedText ? `<button id="cl-simr-original" style="flex:1;background:none;border:1px solid ${C.border};border-radius:2px;padding:8px;cursor:pointer;color:${C.textDim};font-size:11px">원문</button>` : ''}
+        </div>
+    </div>`;
+
+    container.querySelector('#cl-simr-back')?.addEventListener('click', () => { state.simView='list'; renderActivePane(); });
+    container.querySelector('#cl-simr-reroll')?.addEventListener('click', async () => {
+        showLoading(null, 'sim');
+        try {
+            const cast = session.castIds
+                ? session.castIds.map(id => settings.roster.find(c => c.id === id)).filter(Boolean)
+                : session.cast.map(n => settings.roster.find(c => c.name === n)).filter(Boolean);
+            const r = await runSimPrompt(cast, session.situation, session.lang);
+            hideLoading(); session.resultText = r; session.translatedText = null; save(); renderSimResult(container);
+        } catch (e) { hideLoading(); toastr.error(`시뮬 실패: ${e.message}`); }
+    });
+    container.querySelector('#cl-simr-translate')?.addEventListener('click', async () => {
+        const btn = container.querySelector('#cl-simr-translate');
         btn.textContent = '번역 중...'; btn.disabled = true;
         try {
-            const translated = await callAI(
-                `Translate to natural Korean:\n\n${state.simResult}`,
-                'You are a translator. Translate to natural Korean.'
-            );
-            state.simTranslated = translated; renderMadameSim(container);
+            const translated = await callAI(`Translate to natural Korean:\n\n${session.resultText}`, 'You are a translator. Translate to natural Korean.');
+            session.translatedText = translated; save(); renderSimResult(container);
         } catch (e) { toastr.error('번역 실패'); btn.textContent = '🌐 한국어 번역'; btn.disabled = false; }
     });
-    container.querySelector('#cl-sim-untranslate')?.addEventListener('click', () => { state.simTranslated = null; renderMadameSim(container); });
+    container.querySelector('#cl-simr-original')?.addEventListener('click', () => { session.translatedText = null; save(); renderSimResult(container); });
 }
 
 // ═══════════════════════════════════════════
@@ -1644,11 +1762,12 @@ function renderSettings(container) {
 
         ${renderDivider('저장 현황', C.accent)}
         <div style="background:${C.bgCard};border:1px solid ${C.border};border-radius:2px;padding:14px;margin-bottom:14px">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
-                <div><div style="font-size:22px;font-weight:900;color:${C.female};font-family:monospace;text-shadow:0 0 8px ${C.female}88">${settings.roster.length}</div><div style="font-size:9px;color:${C.textDim}">캐릭터</div></div>
-                <div><div style="font-size:22px;font-weight:900;color:#ff2200;font-family:monospace;text-shadow:0 0 8px #ff220088">${settings.battleList.length}</div><div style="font-size:9px;color:${C.textDim}">배틀</div></div>
-                <div><div style="font-size:22px;font-weight:900;color:${C.purple};font-family:monospace;text-shadow:0 0 8px ${C.purple}88">${settings.madameList.length}</div><div style="font-size:9px;color:${C.textDim}">궁합</div></div>
-                <div><div style="font-size:22px;font-weight:900;color:${C.gold};font-family:monospace;text-shadow:0 0 8px ${C.gold}88">${(settings.sajuList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">사주</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:12px">
+                <div><div style="font-size:20px;font-weight:900;color:${C.female};font-family:monospace;text-shadow:0 0 8px ${C.female}88">${settings.roster.length}</div><div style="font-size:9px;color:${C.textDim}">캐릭터</div></div>
+                <div><div style="font-size:20px;font-weight:900;color:#ff2200;font-family:monospace;text-shadow:0 0 8px #ff220088">${settings.battleList.length}</div><div style="font-size:9px;color:${C.textDim}">배틀</div></div>
+                <div><div style="font-size:20px;font-weight:900;color:${C.purple};font-family:monospace;text-shadow:0 0 8px ${C.purple}88">${settings.madameList.length}</div><div style="font-size:9px;color:${C.textDim}">궁합</div></div>
+                <div><div style="font-size:20px;font-weight:900;color:#cc44ff;font-family:monospace;text-shadow:0 0 8px #cc44ff88">${(settings.simList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">시뮬</div></div>
+                <div><div style="font-size:20px;font-weight:900;color:${C.gold};font-family:monospace;text-shadow:0 0 8px ${C.gold}88">${(settings.sajuList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">사주</div></div>
             </div>
             <button id="cl-clear-all" style="width:100%;background:none;border:1px solid #550033;border-radius:2px;padding:8px;cursor:pointer;color:#aa4466;font-size:11px">🗑 전체 데이터 삭제</button>
         </div>
@@ -1671,7 +1790,7 @@ function renderSettings(container) {
         const { Popup, POPUP_RESULT } = SillyTavern.getContext();
         const confirmed = await Popup.show.confirm('전체 삭제', '모든 캐릭터, 배틀, 궁합, 사주 데이터를 삭제합니다. 복구 불가.');
         if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
-            const s = getSettings(); s.roster=[]; s.battleList=[]; s.madameList=[]; s.sajuList=[]; save();
+            const s = getSettings(); s.roster=[]; s.battleList=[]; s.madameList=[]; s.sajuList=[]; s.simList=[]; save();
             toastr.success('전체 삭제 완료'); renderSettings(container);
         }
     });
