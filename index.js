@@ -532,21 +532,27 @@ function openFloat() {
     panel.querySelectorAll('.cl-madame-subtab').forEach(btn => btn.addEventListener('click', () => switchMadameSubtab(btn.dataset.subtab)));
     document.getElementById('scouter-close')?.addEventListener('click', closeFloat);
     document.getElementById('cl-settings-btn')?.addEventListener('click', () => {
-        const existing = document.getElementById('cl-settings-overlay');
-        if (existing) { existing.remove(); return; }
-        const overlay = document.createElement('div');
-        overlay.id = 'cl-settings-overlay';
-        overlay.style.cssText = `position:absolute;top:0;left:0;right:0;bottom:0;background:${C.bg};z-index:20;overflow-y:auto`;
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = '✕ 닫기';
-        closeBtn.style.cssText = `position:sticky;top:0;width:100%;background:${C.bgDeep};border:none;border-bottom:1px solid ${C.border};padding:8px;cursor:pointer;color:${C.textDim};font-size:11px;z-index:21`;
-        closeBtn.onclick = () => overlay.remove();
-        overlay.appendChild(closeBtn);
-        const inner = document.createElement('div');
-        overlay.appendChild(inner);
-        const content = document.getElementById('cl-content');
-        if (content) { content.style.position = 'relative'; content.appendChild(overlay); }
-        renderSettings(inner);
+        // 모든 pane 비활성화
+        document.querySelectorAll('#scouter-float .cl-pane').forEach(p => p.className = 'cl-pane');
+        document.querySelectorAll('#scouter-float .cl-tab').forEach(b => {
+            b.style.color = ''; b.style.borderBottom = '2px solid transparent'; b.style.fontWeight = '400';
+        });
+        document.getElementById('cl-madame-subtabs').style.display = 'none';
+
+        // fortune pane을 설정으로 재활용
+        const el = document.getElementById('cl-pane-fortune');
+        if (el) {
+            el.className = 'cl-pane active';
+            el.innerHTML = '';
+            const backBtn = document.createElement('button');
+            backBtn.textContent = '◀ 뒤로';
+            backBtn.style.cssText = `background:none;border:none;color:#664466;cursor:pointer;font-size:11px;padding:10px 14px 0;display:block`;
+            backBtn.onclick = () => { state.currentTab = 'roster'; switchTab('roster'); };
+            el.appendChild(backBtn);
+            const inner = document.createElement('div');
+            el.appendChild(inner);
+            renderSettings(inner);
+        }
     });
     state.isPanelOpen = true;
     switchTab('roster');
@@ -1471,15 +1477,41 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
 
     // 커플방 baseContext 없으면 로딩
     if (room.type === 'couple' && !room.baseContext) {
+        const msgEl = container.querySelector('#cl-fc-messages');
+
+        function setStatus(text, sub = '') {
+            if (!msgEl) return;
+            msgEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;gap:12px">
+                <div style="font-size:32px;animation:scouter-spin 2s linear infinite">🔯</div>
+                <div style="font-size:13px;color:#ffcc00;font-weight:700">${text}</div>
+                ${sub ? `<div style="font-size:10px;color:#664422;line-height:1.6">${sub}</div>` : ''}
+                <div style="display:flex;gap:4px;margin-top:4px">
+                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out infinite"></div>
+                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
+                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
+                </div>
+            </div>`;
+        }
+
         try {
+            setStatus('채팅 기록을 읽는 중...', '로어북 · 캐릭터 시트 · 대화 내용');
             const slot = getPromptSlot('fortuneBase');
             const baseRaw = await callAIFortune(slot.user, slot.system);
             room.baseContext = stripInfoBlocks(baseRaw);
-            // 첫 인사 — 짧게
+
+            setStatus('사주를 뽑는 중...', '두 사람의 일주와 오행을 계산하고 있어요');
             const greetSlot = getPromptSlot('fortuneChat');
             const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext);
             const greet = await callAI(
-                '첫 인사. 한두 문장으로 짧게. 이미 다 꿰고 있다는 느낌으로. "왔어요?" 같은 무심한 시작.',
+                `Write ONE short greeting sentence as 챗씨부인. 
+RULES: 
+- Maximum 1-2 sentences. 
+- Do NOT analyze, explain, or reveal any information from the context.
+- Do NOT mention saju, compatibility, or any character details.
+- Just casually acknowledge the visitor arrived. Slightly bored/detached tone.
+- Korean only.
+Example: "왔어요? 뭐가 궁금해요." or "앉아요."`,
                 greetSystem
             );
             room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
@@ -1487,7 +1519,6 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
             if (target) { target.baseContext = room.baseContext; target.messages = room.messages; save(); }
             renderFortuneChatRoom(container, roomId, false);
         } catch (e) {
-            const msgEl = container.querySelector('#cl-fc-messages');
             if (msgEl) msgEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:20px;text-align:center">로딩 실패: ${esc(e.message)}<br><button onclick="renderFortune(this.closest('#scouter-float').querySelector('.cl-pane.active'))" style="margin-top:8px;background:none;border:1px solid #664444;padding:5px 10px;cursor:pointer;color:#aa6666;font-size:11px;border-radius:2px">← 뒤로</button></div>`;
         }
         return;
@@ -1498,9 +1529,15 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
         try {
             const greetSlot = getPromptSlot('fortuneChat');
             const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '') +
-                '\n\n[중요] 개인 상담방이다. 맹신 유도 금지. 공감 위주, 긍정적으로 해석. 좋은 방향으로 이야기를 돌려야 한다.';
+                '\n\n[개인 상담방] 맹신 유도 금지. 나쁜 쪽으로 지나치게 편향하지 말 것.';
             const greet = await callAI(
-                '첫 인사. 한두 문장. 무심하게 시작. 내담자 정보 봤다는 뉘앙스.',
+                `Write ONE short greeting as 챗씨부인.
+RULES:
+- 1-2 sentences max.
+- Do NOT analyze the person or reveal any info yet.
+- Just greet them naturally, slightly detached.
+- Korean only.
+Example: "왔어요. 앉아요." or "어, 왔네요. 뭐가 궁금해요?"`,
                 greetSystem
             );
             room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
@@ -1570,7 +1607,8 @@ async function renderFortuneChatRoom(container, roomId, loadBase = false) {
 
         try {
             const slot = getPromptSlot('fortuneChat');
-            const system = slot.system.replace('{{baseContext}}', room.baseContext || '');
+            const system = slot.system.replace('{{baseContext}}', room.baseContext || '') +
+                (room.type === 'personal' ? '\n\n[개인 상담방] 맹신 유도 금지. 나쁜 쪽으로 지나치게 편향하지 말 것.' : '');
             // callAI 방식 — system을 첫 메시지로 주입, 이후 히스토리
             const historyMsgs = (room.messages||[]).slice(-20);
             const response = await callAIWithHistory(system, historyMsgs);
@@ -1660,109 +1698,177 @@ async function callAIWithHistory(system, messages) {
 // ═══════════════════════════════════════════
 const FORTUNE_INJECT_KEY = 'chatssibuin_daily_fortune';
 
-function injectFortune(text) {
-    const ctx = SillyTavern.getContext();
-    ctx.setExtensionPrompt(FORTUNE_INJECT_KEY, `[오늘의 운세 - MINE신의 계시]\n${text}`, 'after_scenario', 0);
-    save();
-}
-
 function clearFortune() {
     const ctx = SillyTavern.getContext();
-    ctx.setExtensionPrompt(FORTUNE_INJECT_KEY, '', 'after_scenario', 0);
+    ctx.setExtensionPrompt?.(FORTUNE_INJECT_KEY, '', 'after_scenario', 0);
     const s = getSettings();
-    s.dailyFortune = null;
-    s.dailyFortuneInjected = false;
+    s.dailyFortune = null; s.dailyPersonaFortune = null;
     save();
 }
 
-async function generateDailyFortune() {
-    const ctx = SillyTavern.getContext();
-    const char = ctx.characters?.[ctx.characterId];
-    const charName = char?.name || '캐릭터';
+const FORTUNE_EMOJIS = {
+    '대길': '🌟', '길': '✨', '평': '😶', '흉': '💀', '대흉': '☠️',
+    '최고': '🌟', '좋음': '🍀', '보통': '🌀', '나쁨': '🌧️', '최악': '💣',
+};
 
-    const prompt = `오늘의 운세를 봐줘. 대상: ${charName}.
+function getFortuneEmoji(total) {
+    if (total >= 80) return '🌟';
+    if (total >= 60) return '🍀';
+    if (total >= 40) return '🌀';
+    if (total >= 20) return '🌧️';
+    return '💣';
+}
 
-MINE신이 오늘 이 인물에게 내린 운세를 재밌고 구체적으로 알려줘.
-딱딱하지 않게, 웃기면서도 그럴듯하게.
-각 항목 한 줄씩:
+async function generateFortune(targetName, targetDesc) {
+    const prompt = `[오늘의 운세 대상: ${targetName}]
+캐릭터 정보: ${targetDesc}
 
-오늘의 총운:
-금전운:
-연애운:
-건강운:
-오늘의 행운의 아이템:
-오늘 주의할 것:
-MINE신의 한마디:
+이 캐릭터의 오늘 하루 운세를 롤플레이에 써먹을 수 있게 구체적으로 뽑아줘.
+진지하게 점집에서 보는 것처럼, 근데 읽으면 재밌게.
+캐릭터의 성격/직업/특징이 반드시 반영되어야 해.
 
-짧고 임팩트 있게. 각 항목 15자 이내.`;
+아래 형식으로 출력:
 
-    return await callAI(prompt, `당신은 챗씨부인, 젊은 여성 무당. MINE신의 계시를 받아 오늘의 운세를 봐준다. 
-재밌고 구체적으로, 너무 진지하지 않게. 가끔 웃긴 운도 섞어. 한국어로.`);
+총운점수: (0-100 숫자만)
+총운: (한 줄. 오늘 전체 분위기)
+금전운: (한 줄. 구체적 사건 포함)
+연애운: (한 줄. 이 캐릭터 성격 반영)
+건강운: (한 줄. 신체적/정신적)
+오늘의 사건: (한 줄. 롤플에 실제로 일어날 법한 사소한 사건 하나. 예: 지갑을 잃어버린다, 누군가와 눈이 마주친다)
+주의: (한 줄. 오늘 조심해야 할 것)
+행운의 아이템: (한 줄. 구체적 사물)
+
+각 항목 20자 이내. 반드시 한국어.`;
+
+    return await callAI(prompt,
+        `You are a Korean fortune teller. Generate a specific, character-appropriate daily fortune in Korean. 
+Make it feel authentic and slightly dramatic, but specific to this character's traits. No generic fortunes.
+Output must follow the exact format requested. Korean only.`
+    );
+}
+
+function parseFortune(text) {
+    const lines = text.split('\n').filter(l => l.trim());
+    const result = {};
+    for (const line of lines) {
+        const m = line.match(/^([^:：]+)[：:]\s*(.+)/);
+        if (m) result[m[1].trim()] = m[2].trim();
+    }
+    return result;
+}
+
+function renderFortuneCard(data, name) {
+    const score = parseInt(data['총운점수'] || '50');
+    const emoji = getFortuneEmoji(score);
+    const scoreColor = score >= 80 ? '#ffcc00' : score >= 60 ? '#88cc44' : score >= 40 ? '#aaaaaa' : score >= 20 ? '#cc8844' : '#cc4444';
+
+    const items = [
+        { key: '총운', icon: '☀️' },
+        { key: '금전운', icon: '💰' },
+        { key: '연애운', icon: '💘' },
+        { key: '건강운', icon: '💪' },
+        { key: '오늘의 사건', icon: '⚡' },
+        { key: '주의', icon: '⚠️' },
+        { key: '행운의 아이템', icon: '🍀' },
+    ];
+
+    return `
+    <div style="background:#0a0800;border:1px solid #ffcc0033;border-radius:4px;overflow:hidden;margin-bottom:10px">
+        <div style="background:linear-gradient(135deg,#1a1000,#0d0500);padding:14px;text-align:center;border-bottom:1px solid #ffcc0022">
+            <div style="font-size:42px;line-height:1;margin-bottom:6px">${emoji}</div>
+            <div style="font-size:13px;font-weight:700;color:#ffcc88">${esc(name)}</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px">
+                <div style="flex:1;height:4px;background:#1a1000;border-radius:2px;overflow:hidden">
+                    <div style="width:${score}%;height:100%;background:linear-gradient(90deg,${scoreColor},${scoreColor}88)"></div>
+                </div>
+                <div style="font-size:18px;font-weight:900;color:${scoreColor};font-family:monospace;width:36px">${score}</div>
+            </div>
+        </div>
+        <div style="padding:12px">
+            ${items.map(({key, icon}) => data[key] ? `
+            <div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start">
+                <span style="font-size:14px;flex-shrink:0;margin-top:1px">${icon}</span>
+                <div>
+                    <div style="font-size:9px;color:#664422;letter-spacing:1px;margin-bottom:2px">${key}</div>
+                    <div style="font-size:12px;color:#ffcc88;line-height:1.5">${esc(data[key])}</div>
+                </div>
+            </div>` : '').join('')}
+        </div>
+    </div>`;
 }
 
 function renderDailyFortune(container) {
     const settings = getSettings();
-    const injected = settings.dailyFortuneInjected || false;
-    const fortune = settings.dailyFortune || null;
+    const ctx = SillyTavern.getContext();
+    const char = ctx.characters?.[ctx.characterId];
+    const charName = char?.name || '캐릭터 없음';
+    const charDesc = [char?.description, char?.personality].filter(Boolean).join('\n').slice(0, 500) || '설명 없음';
+
+    // 페르소나
+    let personaName = '페르소나 없음';
+    let personaDesc = '';
+    try {
+        const pu = (window.__power_user || {});
+        const active = pu.active_persona;
+        if (active && pu.personas?.[active]) {
+            personaName = pu.personas[active];
+            personaDesc = pu.persona_descriptions?.[active]?.description || '';
+        }
+    } catch(e) {}
+
+    if (!container._fs) container._fs = { tab: 'char', charFortune: null, personaFortune: null };
+    const fs = container._fs;
+
+    const tabStyle = (t) => `flex:1;padding:7px;border-radius:2px;cursor:pointer;font-size:11px;font-weight:700;background:${fs.tab===t?'#ffcc0022':'none'};border:${fs.tab===t?'1px solid #ffcc0088':'1px solid #332200'};color:${fs.tab===t?'#ffcc00':'#664422'}`;
+
+    const fortune = fs.tab === 'char' ? fs.charFortune : fs.personaFortune;
+    const parsed = fortune ? parseFortune(fortune) : null;
+    const targetName = fs.tab === 'char' ? charName : personaName;
 
     container.innerHTML = `<div style="padding:14px">
-        <div style="background:linear-gradient(180deg,#1a1000,#0d0800);border:1px solid #ffcc0066;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px">
-            <div style="font-size:15px;font-weight:700;color:#ffcc00">☀️ 오늘의 운세</div>
-            <div style="font-size:10px;color:#886633;margin-top:4px">MINE신이 오늘 하루를 점쳐드립니다</div>
-            <div style="font-size:9px;color:#664422;margin-top:4px">⚠️ 재미로 보는 운세입니다</div>
+        <div style="text-align:center;margin-bottom:14px">
+            <div style="font-size:16px;font-weight:700;color:#ffcc00">☀️ 오늘의 운세</div>
+            <div style="font-size:9px;color:#664422;margin-top:3px">⚠️ 재미로 보는 운세입니다</div>
         </div>
 
-        ${fortune ? `
-        <div style="background:#0a0800;border:1px solid #ffcc0044;border-radius:2px;padding:14px;margin-bottom:12px;font-size:12px;color:#ffcc88;line-height:2;white-space:pre-wrap">${esc(fortune)}</div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-            <button id="cl-fortune-inject" style="flex:1;background:${injected?'#00440022':'#ffcc0022'};border:1px solid ${injected?'#00aa44':'#ffcc0088'};border-radius:2px;padding:8px;cursor:pointer;color:${injected?'#44cc88':'#ffcc00'};font-size:11px;font-weight:700">
-                ${injected ? '✅ 롤플에 주입 중' : '📌 롤플에 주입'}
-            </button>
-            ${injected ? `<button id="cl-fortune-uninject" style="flex:1;background:none;border:1px solid #664422;border-radius:2px;padding:8px;cursor:pointer;color:#aa6644;font-size:11px">주입 해제</button>` : ''}
+        <div style="display:flex;gap:6px;margin-bottom:14px">
+            <button id="cl-ftt-char" style="${tabStyle('char')}">🎭 ${esc(charName)}</button>
+            <button id="cl-ftt-persona" style="${tabStyle('persona')}">👤 ${esc(personaName)}</button>
         </div>
-        <button id="cl-fortune-regen" style="width:100%;background:none;border:1px solid #664422;border-radius:2px;padding:8px;cursor:pointer;color:#886633;font-size:11px">🔄 다시 뽑기</button>
+
+        ${parsed ? `
+        ${renderFortuneCard(parsed, targetName)}
+        <button id="cl-fortune-regen" style="width:100%;background:none;border:1px solid #332200;border-radius:2px;padding:8px;cursor:pointer;color:#664422;font-size:11px;margin-top:4px">🔄 다시 뽑기</button>
         ` : `
-        <button id="cl-fortune-gen" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0088;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700">
-            ☀️ 오늘의 운세 보기
+        <div style="text-align:center;padding:20px 0;color:#664422;font-size:11px;margin-bottom:10px">
+            MINE신에게 오늘의 운세를 물어보세요
+        </div>
+        <button id="cl-fortune-gen" style="width:100%;background:#ffcc0022;border:2px solid #ffcc0066;border-radius:2px;padding:12px;cursor:pointer;color:#ffcc00;font-size:13px;font-weight:700">
+            ☀️ ${esc(targetName)}의 오늘 운세 보기
         </button>
         `}
-
-        ${injected ? `
-        <div style="background:#001a0a;border:1px solid #00aa4444;border-radius:2px;padding:10px;margin-top:10px;font-size:10px;color:#44cc88">
-            ✅ 현재 롤플 컨텍스트에 주입 중 — 사건이 일어날 때까지 유지됩니다
-        </div>` : ''}
     </div>`;
+
+    container.querySelector('#cl-ftt-char')?.addEventListener('click', () => { fs.tab='char'; renderDailyFortune(container); });
+    container.querySelector('#cl-ftt-persona')?.addEventListener('click', () => { fs.tab='persona'; renderDailyFortune(container); });
 
     const gen = async (btn) => {
         if (btn) { btn.textContent = 'MINE신을 부르는 중...'; btn.disabled = true; }
         try {
-            const text = await generateDailyFortune();
-            const s = getSettings();
-            s.dailyFortune = text;
-            save();
+            const desc = fs.tab === 'char' ? charDesc : personaDesc;
+            const name = fs.tab === 'char' ? charName : personaName;
+            const text = await generateFortune(name, desc || name);
+            if (fs.tab === 'char') fs.charFortune = text;
+            else fs.personaFortune = text;
             renderDailyFortune(container);
         } catch(e) {
             toastr.error(`운세 생성 실패: ${e.message}`);
-            if (btn) { btn.textContent = '☀️ 오늘의 운세 보기'; btn.disabled = false; }
+            if (btn) { btn.disabled = false; btn.textContent = '☀️ 운세 보기'; }
         }
     };
 
     container.querySelector('#cl-fortune-gen')?.addEventListener('click', e => gen(e.target));
     container.querySelector('#cl-fortune-regen')?.addEventListener('click', e => gen(e.target));
-
-    container.querySelector('#cl-fortune-inject')?.addEventListener('click', () => {
-        if (injected) return;
-        injectFortune(fortune);
-        const s = getSettings(); s.dailyFortuneInjected = true; save();
-        renderDailyFortune(container);
-        toastr.success('롤플 컨텍스트에 운세 주입됨');
-    });
-
-    container.querySelector('#cl-fortune-uninject')?.addEventListener('click', () => {
-        clearFortune();
-        renderDailyFortune(container);
-        toastr.success('운세 주입 해제됨');
-    });
 }
 
 // ═══════════════════════════════════════════
