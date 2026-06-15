@@ -48,15 +48,15 @@ Return ONLY this JSON object (no other text):
   "traits": "key traits/habits 1-2 sentences. Korean.",
   "gender": "female or male",
   "stats": {
-    "combat": 0-100,
-    "roast": 0-100,
-    "sex": 0-100,
-    "mental": 0-100,
-    "charisma": 0-100
+    "charm": 0-100,
+    "presence": 0-100,
+    "desire": 0-100,
+    "wit": 0-100,
+    "aura": 0-100
   }
 }
 
-Stats must be differentiated. sex = physical attractiveness + charismatic appeal. Text values in Korean.` }] },
+Stats must be highly differentiated based on character traits. charm=physical+vibe, presence=charisma+dominance, desire=sexual appeal+magnetism, wit=intelligence+wordplay, aura=intensity+pressure. Text values in Korean.` }] },
 
     analyzeIntimacy: { active: 0, slots: [{ name: '기본',
         system:
