@@ -1,13 +1,13 @@
 {
-    "display_name": "Scouter",
+    "display_name": "챗씨부인상담소",
     "loading_order": 10,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
     "author": "봉봉",
-    "version": "1.0.0",
-    "homePage": "https://github.com/your/scouter",
+    "version": "3.0.0",
+    "homePage": "https://github.com/bongbong11/Scouter",
     "auto_update": false,
     "hooks": {
         "activate": "onActivate"
