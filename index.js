@@ -269,8 +269,9 @@ async function runSimPrompt(cast, situation, lang = 'ko') {
     const castDesc = cast.map(c =>
         `【${c.name}】(${c.gender === 'female' ? '여' : '남'}, ${c.parsed.age}, ${c.parsed.job})\n성격: ${c.parsed.personality}\n특징: ${c.parsed.traits}`
     ).join('\n\n');
-    const systemWithLang = slot.system + ` Write output in ${outputLang}.`;
-    return await callAIRaw(fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' }), systemWithLang);
+    const langInstruction = lang === 'en' ? '[IMPORTANT: Write your entire response in English only.]\n\n' : '';
+    const prompt = langInstruction + fillTpl(slot.user, { castDesc, situation: situation || '두 사람이 우연히 마주쳤다.' });
+    return await callAIRaw(prompt, slot.system);
 }
 
 const PROMPTS_URL = 'https://raw.githubusercontent.com/bongbong11/Scouter/main/prompts.json';
@@ -320,34 +321,33 @@ function showLoading(targetEl, type = 'analyze') {
     let msgIdx = 0;
     const overlay = document.createElement('div');
     overlay.id = 'scouter-loading';
-    overlay.style.cssText = `position:absolute;inset:0;background:${C.bg}ee;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px`;
+    overlay.style.cssText = `position:sticky;bottom:0;left:0;right:0;background:${C.bgDeep}ee;border-top:1px solid ${C.border};z-index:10;display:flex;flex-direction:row;align-items:center;gap:12px;padding:10px 14px;backdrop-filter:blur(4px)`;
     overlay.innerHTML = `
-        <div style="position:relative;width:60px;height:60px">
-            <svg viewBox="0 0 60 60" style="width:60px;height:60px;animation:scouter-spin 1.2s linear infinite">
+        <div style="position:relative;width:32px;height:32px;flex-shrink:0">
+            <svg viewBox="0 0 60 60" style="width:32px;height:32px;animation:scouter-spin 1.2s linear infinite">
                 <circle cx="30" cy="30" r="24" fill="none" stroke="${C.border}" stroke-width="3"/>
                 <circle cx="30" cy="30" r="24" fill="none" stroke="${C.accent}" stroke-width="3"
                     stroke-dasharray="40 110" stroke-linecap="round"/>
             </svg>
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px">🔴</div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px">🔴</div>
         </div>
-        <div id="scouter-loading-msg" style="font-size:12px;color:${C.text};font-family:monospace;letter-spacing:1px;text-align:center;max-width:200px;line-height:1.7">${msgs[0]}</div>
-        <div style="display:flex;gap:4px">
-            <div class="scouter-dot" style="width:6px;height:6px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out infinite"></div>
-            <div class="scouter-dot" style="width:6px;height:6px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
-            <div class="scouter-dot" style="width:6px;height:6px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
+        <div style="flex:1">
+            <div id="scouter-loading-msg" style="font-size:11px;color:${C.text};font-family:monospace;letter-spacing:1px;line-height:1.5">${msgs[0]}</div>
+            <div style="display:flex;gap:3px;margin-top:4px">
+                <div class="scouter-dot" style="width:5px;height:5px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out infinite"></div>
+                <div class="scouter-dot" style="width:5px;height:5px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
+                <div class="scouter-dot" style="width:5px;height:5px;border-radius:50%;background:${C.accent};animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
+            </div>
         </div>`;
 
-    // 기존 로딩 제거
     document.getElementById('scouter-loading')?.remove();
 
-    // 컨텐츠 영역에 오버레이
     const content = document.getElementById('cl-content');
     if (content) {
         content.style.position = 'relative';
         content.appendChild(overlay);
     }
 
-    // 메시지 순환
     const interval = setInterval(() => {
         msgIdx = (msgIdx + 1) % msgs.length;
         const msgEl = document.getElementById('scouter-loading-msg');
@@ -1578,8 +1578,9 @@ function renderFortune(container) {
         try {
             const slot = getPromptSlot('fortune');
             const prompt = fillTpl(slot.user, { char: charName });
-            const sys = fs.lang === 'ko' ? slot.system.replace('Output in English.', 'Output in Korean.') : slot.system;
-            fs.result = await callAIFortune(prompt, sys);
+            const langInstruction = fs.lang === 'ko' ? '[IMPORTANT: Write your entire response in Korean only.]\n\n' : '[IMPORTANT: Write your entire response in English only.]\n\n';
+            const fullPrompt = `${slot.system}\n\n${langInstruction}${prompt}`;
+            fs.result = await callAIFortune(fullPrompt, null);
             fs.translated = null;
             renderFortune(container);
         } catch (e) {
