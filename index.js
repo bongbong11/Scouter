@@ -690,11 +690,12 @@ async function importPersonas() {
         const list = entries.map(([file, name]) => {
             const avatar = `/thumbnail?type=persona&file=${encodeURIComponent(file)}`;
             const descObj = descriptions[file] || {};
+            const title = typeof descObj === 'object' ? (descObj.title || '') : '';
             const descPreview = (typeof descObj === 'string' ? descObj : descObj.description || '').split('\n')[0].slice(0, 40);
             return `<div class="cl-imp-p" data-file="${esc(file)}" data-name="${esc(name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px;display:flex;align-items:center;gap:10px">
                 <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid ${C.border};flex-shrink:0" onerror="this.style.display='none'">
                 <div>
-                    <div style="font-weight:700">${esc(name)}</div>
+                    <div style="font-weight:700">${esc(name)}${title ? ` <span style="font-size:10px;color:${C.purple};font-weight:400">· ${esc(title)}</span>` : ''}</div>
                     <div style="font-size:10px;color:${C.textDim}">${esc(descPreview)}</div>
                 </div>
             </div>`;
