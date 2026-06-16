@@ -1400,8 +1400,7 @@ function renderFortune(container) {
     const char = ctx.characters?.[ctx.characterId];
     const charName = char?.name || '캐릭터';
     const pu = ctx.powerUserSettings;
-    const defaultKey = pu?.default_persona;
-    const personaName = (defaultKey && pu?.personas?.[defaultKey]) ? pu.personas[defaultKey] : null;
+    const personaName = ctx.name1 || null;
 
     if (!container._fs) container._fs = { result: null, question: null, loading: false };
     const fs = container._fs;
@@ -1681,11 +1680,9 @@ async function renderDailyFortune(container) {
     let personaName = '페르소나 없음';
     let personaDesc = '';
     try {
-        const pu = SillyTavern.getContext().powerUserSettings;
-        const defaultKey = pu?.default_persona;
-        if (defaultKey && pu?.personas?.[defaultKey]) {
-            personaName = pu.personas[defaultKey];
-        }
+        const ctx2 = SillyTavern.getContext();
+        const pu = ctx2.powerUserSettings;
+        personaName = ctx2.name1 || '';
         personaDesc = pu?.persona_description || '';
     } catch(e) { console.warn('[챗씨부인] 페르소나 로드 실패:', e.message); }
 
