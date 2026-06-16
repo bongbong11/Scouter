@@ -40,7 +40,7 @@ import { PROMPT_META, DEFAULT_PROMPTS } from './prompts.js';
 // 기본 설정
 // ═══════════════════════════════════════════
 const defaultSettings = {
-    roster: [], madameList: [], sajuList: [], fortuneRooms: [],
+    roster: [], madameList: [], sajuList: [], fortuneRooms: [], fortuneRecords: [],
     allowSameGender: false, selectedProfileName: null, fortuneProfileName: null,
     devUnlocked: false, prompts: null, maxTokens: 4000,
     dailyFortune: null, dailyFortuneInjected: false,
@@ -682,21 +682,19 @@ function importSTChars() {
 
 async function importPersonas() {
     try {
-        const { power_user } = await import('/scripts/power-user.js');
-        const { getUserAvatars } = await import('/scripts/personas.js');
-        const personas = power_user?.personas || {};
-        const descriptions = power_user?.persona_descriptions || {};
+        const pu = SillyTavern.getContext().powerUserSettings;
+        const personas = pu?.personas || {};
+        const descriptions = pu?.persona_descriptions || {};
         const entries = Object.entries(personas).filter(([, name]) => name && name !== '[Unnamed Persona]');
         if (!entries.length) { toastr.warning('등록된 페르소나가 없습니다'); return; }
         const list = entries.map(([file, name]) => {
             const avatar = `/thumbnail?type=persona&file=${encodeURIComponent(file)}`;
             const descObj = descriptions[file] || {};
-            const title = descObj.title || '';
             const descPreview = (typeof descObj === 'string' ? descObj : descObj.description || '').split('\n')[0].slice(0, 40);
             return `<div class="cl-imp-p" data-file="${esc(file)}" data-name="${esc(name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid ${C.border};color:${C.text};font-size:12px;display:flex;align-items:center;gap:10px">
                 <img src="${avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid ${C.border};flex-shrink:0" onerror="this.style.display='none'">
                 <div>
-                    <div style="font-weight:700">${esc(name)}${title ? ` <span style="font-size:10px;color:${C.purple};font-weight:400">· ${esc(title)}</span>` : ''}</div>
+                    <div style="font-weight:700">${esc(name)}</div>
                     <div style="font-size:10px;color:${C.textDim}">${esc(descPreview)}</div>
                 </div>
             </div>`;
@@ -708,7 +706,8 @@ async function importPersonas() {
                 const file = item.dataset.file, name = item.dataset.name;
                 const descObj = descriptions[file] || {};
                 const desc = typeof descObj === 'string' ? descObj : (descObj.description || '');
-                addCharFromImport(name, `페르소나 이름: ${name}\n${desc || '(설명 없음)'}`, 'female'); popup.hide?.();
+                addCharFromImport(name, `페르소나 이름: ${name}\n${desc || pu?.persona_description || '(설명 없음)'}`, 'female');
+                popup.hide?.();
             }));
         }, 100);
         popup.show();
@@ -1369,282 +1368,143 @@ function stripInfoBlocks(text) {
         .trim();
 }
 
+
+// ═══════════════════════════════════════════
+// 신당 — 신령님께 여쭤봅니다
+// ═══════════════════════════════════════════
+
+const FORTUNE_QUESTIONS = [
+    { label: '💍 결혼하나요?', q: '이 두 사람 결혼하나요? 한다면 언제쯤?' },
+    { label: '👶 애는 몇 명?', q: '이 두 사람 사이에 아이가 생기나요? 몇 명이나?' },
+    { label: '💥 싸움은요?', q: '이 두 사람 앞으로 크게 싸우나요? 어떤 이유로?' },
+    { label: '🏠 어디 살아요?', q: '이 두 사람 나중에 어디서 같이 살게 되나요?' },
+    { label: '💔 헤어지나요?', q: '이 두 사람 헤어질 것 같나요?' },
+    { label: '💰 돈 잘 벌어요?', q: '이 두 사람의 금전운은 어떤가요?' },
+    { label: '🔥 지금 이 사람 마음은?', q: '지금 이 순간 상대방의 진짜 마음이 어떤가요?' },
+    { label: '⚡ 오늘 무슨 일이?', q: '오늘 이 두 사람 사이에 무슨 일이 일어날 것 같나요?' },
+];
+
+const FORTUNE_SYSTEM = `당신은 챗씨부인이라는 신묘한 점쟁이입니다.
+사주와 관상으로 인연을 꿰뚫어보는 능력자.
+말투는 한국 전통 점집 특유의 약간 신비롭고 능글맞은 사주 선생님 말투로.
+"~이로다", "~하느니라", "~하구나" 등의 어미 사용.
+분석은 구체적이고 날카롭게. 있는 그대로 말하느니라.
+답변은 3-6문장 이내로 간결하게.
+캐릭터 이름과 특징을 반드시 언급할 것.
+Do NOT reproduce HTML, XML, OOC, scene info blocks.`;
+
 function renderFortune(container) {
     const settings = getSettings();
-    const rooms = settings.fortuneRooms || [];
+    const saved = settings.fortuneRecords || [];
+    const ctx = SillyTavern.getContext();
+    const char = ctx.characters?.[ctx.characterId];
+    const charName = char?.name || '캐릭터';
+    const pu = ctx.powerUserSettings;
+    const defaultKey = pu?.default_persona;
+    const personaName = (defaultKey && pu?.personas?.[defaultKey]) ? pu.personas[defaultKey] : null;
 
-    const list = rooms.map(r => `
-        <div class="cl-froom" data-id="${r.id}" style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid #ffcc00;border-radius:2px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:6px">
-            <div style="font-size:20px">${r.type === 'couple' ? '💑' : '🙋'}</div>
-            <div style="flex:1">
-                <div style="font-size:12px;font-weight:700;color:${C.textBright}">${esc(r.title)}</div>
-                <div style="font-size:10px;color:${C.textDim};margin-top:2px">${esc(r.createdAt || '')} · 대화 ${(r.messages||[]).length}개</div>
-            </div>
-            <button class="cl-froom-del" data-id="${r.id}" style="background:none;border:1px solid ${C.border};border-radius:2px;padding:3px 7px;cursor:pointer;color:${C.textDim};font-size:10px">🗑</button>
-        </div>`).join('') || `<div style="text-align:center;color:${C.textDim};font-size:12px;padding:24px 0">채팅방이 없습니다</div>`;
+    if (!container._fs) container._fs = { result: null, question: null, loading: false };
+    const fs = container._fs;
 
-    container.innerHTML = `<div style="padding:14px">
-        <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border:1px solid #ffcc0066;border-radius:2px;padding:14px;text-align:center;margin-bottom:14px" class="cl-pulse-gold">
-            <div style="font-size:15px;font-weight:700;color:#ffcc00">🔯 챗씨부인 점집</div>
-            <div style="font-size:10px;color:#886633;margin-top:4px">재미로 보는 점입니다 · 실제 점술이 아닙니다</div>
-        </div>
-        ${renderDivider('채팅방 목록', '#ffcc00')}
-        ${list}
-        <div style="display:flex;gap:8px;margin-top:8px">
-            <button id="cl-froom-couple" style="flex:1;background:#ffcc0022;border:1px solid #ffcc0066;border-radius:2px;padding:9px;cursor:pointer;color:#ffcc00;font-size:11px;font-weight:700">💑 커플 사주방</button>
-            <button id="cl-froom-personal" style="flex:1;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:9px;cursor:pointer;color:${C.purple};font-size:11px;font-weight:700">🙋 개인 상담방</button>
-        </div>
-    </div>`;
-
-    container.querySelectorAll('.cl-froom').forEach(el => el.addEventListener('click', () => {
-        const room = (getSettings().fortuneRooms||[]).find(r => r.id === el.dataset.id);
-        if (room) renderFortuneChatRoom(container, room.id);
-    }));
-    container.querySelectorAll('.cl-froom-del').forEach(btn => btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const s = getSettings(); s.fortuneRooms = (s.fortuneRooms||[]).filter(r => r.id !== btn.dataset.id); save();
-        renderFortune(container);
-    }));
-    container.querySelector('#cl-froom-couple')?.addEventListener('click', () => renderFortuneNewRoom(container, 'couple'));
-    container.querySelector('#cl-froom-personal')?.addEventListener('click', () => renderFortuneNewRoom(container, 'personal'));
-}
-
-async function renderFortuneNewRoom(container, type) {
-    if (type === 'couple') {
-        const ctx = SillyTavern.getContext();
-        const char = ctx.characters?.[ctx.characterId];
-        const charName = char?.name || '캐릭터';
-
-        // 페르소나 이름 읽기
-        let personaName = '';
-        try {
-            const { power_user } = await import('/scripts/power-user.js');
-            const active = power_user?.active_persona;
-            if (active && power_user?.personas?.[active]) {
-                personaName = power_user.personas[active];
-            }
-        } catch(e) {}
-
-        const title = personaName
-            ? `${charName} ♥ ${personaName}`
-            : `${charName} 커플 사주`;
-        const room = { id: 'froom_' + Date.now(), type: 'couple', title, baseContext: null, messages: [], createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
-        const s = getSettings(); if (!s.fortuneRooms) s.fortuneRooms = []; s.fortuneRooms.unshift(room); save();
-        renderFortuneChatRoom(container, room.id, true);
-    } else {
-        // 개인방 — 정보 입력창
-        container.innerHTML = `<div style="padding:14px">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-                <button id="cl-fp-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀ 뒤로</button>
-                <span style="font-size:13px;font-weight:700;color:${C.purple}">🙋 개인 상담방</span>
-            </div>
-            <div style="font-size:11px;color:${C.textDim};margin-bottom:10px;line-height:1.7">상담받고 싶은 분의 정보를 자유롭게 입력하세요.<br>이름, 생년월일, 고민 등 원하는 내용을 적어주세요.</div>
-            <textarea id="cl-fp-info" rows="6" placeholder="예) 이름: 김민지, 1995년 3월 15일생, 여성. 남자친구와 헤어져야 할지 고민 중..." style="width:100%;background:${C.bgDeep};border:1px solid ${C.border};border-radius:2px;padding:10px;color:${C.text};font-size:12px;box-sizing:border-box;outline:none;resize:none;line-height:1.7;margin-bottom:12px"></textarea>
-            <button id="cl-fp-start" style="width:100%;background:${C.purple}22;border:1px solid ${C.purple}66;border-radius:2px;padding:10px;cursor:pointer;color:${C.purple};font-size:12px;font-weight:700">🔯 상담방 만들기</button>
-        </div>`;
-        container.querySelector('#cl-fp-back')?.addEventListener('click', () => renderFortune(container));
-        container.querySelector('#cl-fp-start')?.addEventListener('click', () => {
-            const info = container.querySelector('#cl-fp-info')?.value?.trim();
-            if (!info) { toastr.warning('정보를 입력해주세요'); return; }
-            const room = { id: 'froom_' + Date.now(), type: 'personal', title: '개인 상담', baseContext: `[내담자 정보]\n${info}`, messages: [], createdAt: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g, '.') };
-            const s = getSettings(); if (!s.fortuneRooms) s.fortuneRooms = []; s.fortuneRooms.unshift(room); save();
-            renderFortuneChatRoom(container, room.id, false);
-        });
-    }
-}
-
-async function renderFortuneChatRoom(container, roomId, loadBase = false) {
-    const settings = getSettings();
-    let room = (settings.fortuneRooms||[]).find(r => r.id === roomId);
-    if (!room) { renderFortune(container); return; }
-
-    function renderMessages() {
-        const msgs = room.messages || [];
-        return msgs.map(m => m.role === 'user'
-            ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(m.content)}</div></div>`
-            : `<div style="display:flex;gap:10px;margin-bottom:12px"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(m.content)}</div></div>`
-        ).join('');
-    }
-
-    container.innerHTML = `
-    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
-    <div style="background:linear-gradient(180deg,#1a0020,#0d0015);border-bottom:1px solid #ffcc0044;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
-        <button id="cl-fc-back" style="background:none;border:none;color:${C.textDim};cursor:pointer;font-size:11px;padding:0">◀</button>
-        <div style="font-size:13px;font-weight:700;color:#ffcc00;flex:1">${esc(room.title)}</div>
-        <button id="cl-fc-refresh" title="채팅 다시 읽기" style="background:none;border:1px solid #ffcc0044;border-radius:2px;padding:3px 8px;cursor:pointer;color:#ffcc00;font-size:11px">🔄</button>
-    </div>
-    <div id="cl-fc-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;min-height:0">
-        ${room.baseContext === null && room.type === 'couple'
-            ? `<div style="text-align:center;padding:30px;color:${C.textDim};font-size:11px">
-                <div style="font-size:24px;margin-bottom:10px">🔯</div>
-                MINE신을 모시는 중...<br>
-                <span style="font-size:10px;opacity:0.6">채팅방 정보를 읽어오고 있습니다</span>
-               </div>`
-            : renderMessages()}
-    </div>
-    <div style="padding:10px 14px;border-top:1px solid ${C.border};display:flex;gap:8px;flex-shrink:0;background:${C.bgDeep}">
-        <textarea id="cl-fc-input" rows="2" placeholder="챗씨부인에게 물어보세요..." style="flex:1;background:${C.bg};border:1px solid ${C.border};border-radius:2px;padding:8px;color:${C.text};font-size:12px;outline:none;resize:none;line-height:1.6"></textarea>
-        <button id="cl-fc-send" style="background:#ffcc0033;border:1px solid #ffcc0088;border-radius:2px;padding:8px 12px;cursor:pointer;color:#ffcc00;font-size:18px;flex-shrink:0">↑</button>
-    </div>
-    </div>`;
-
-    // 커플방 baseContext 없으면 로딩
-    if (room.type === 'couple' && !room.baseContext) {
-        const msgEl = container.querySelector('#cl-fc-messages');
-
-        function setStatus(text, sub = '') {
-            if (!msgEl) return;
-            msgEl.innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:30px;text-align:center;gap:12px">
-                <div style="font-size:32px;animation:scouter-spin 2s linear infinite">🔯</div>
-                <div style="font-size:13px;color:#ffcc00;font-weight:700">${text}</div>
-                ${sub ? `<div style="font-size:10px;color:#664422;line-height:1.6">${sub}</div>` : ''}
-                <div style="display:flex;gap:4px;margin-top:4px">
-                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out infinite"></div>
-                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.2s infinite"></div>
-                    <div style="width:6px;height:6px;border-radius:50%;background:#ffcc00;animation:scouter-dot 1.2s ease-in-out 0.4s infinite"></div>
+    const savedList = saved.slice(0, 10).map(r => `
+        <div style="background:${C.bgCard};border:1px solid ${C.border};border-left:3px solid #ffcc0066;border-radius:2px;padding:10px 12px;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+                <div style="font-size:10px;color:#886633">${esc(r.question)}</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:9px;color:#664422">${esc(r.date||'')}</span>
+                    <button class="cl-fr-del" data-id="${r.id}" style="background:none;border:none;cursor:pointer;color:#664422;font-size:10px;padding:0">🗑</button>
                 </div>
-            </div>`;
-        }
+            </div>
+            <div style="font-size:11px;color:#ffcc88;line-height:1.8">${esc(r.answer)}</div>
+        </div>`).join('') || '';
+
+    container.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
+        <div style="padding:12px 14px;border-bottom:1px solid #1a0020;flex-shrink:0">
+            <div style="text-align:center;margin-bottom:10px">
+                <div style="font-size:14px;font-weight:700;color:#ffcc00">🔯 신령님께 여쭤봅니다</div>
+                <div style="font-size:9px;color:#664422;margin-top:2px">
+                    ${charName}${personaName ? ` ♥ ${personaName}` : ''} · 재미로 보는 점입니다
+                </div>
+            </div>
+            <div style="display:flex;gap:6px">
+                <input id="cl-fq-custom" type="text" placeholder="신령님께 여쭤보세요... (결혼하나요? 싸움은 없나요?)" style="flex:1;background:#0a0800;border:1px solid #332200;border-radius:2px;padding:8px;color:#ffcc88;font-size:11px;outline:none">
+                <button id="cl-fq-ask" style="background:#ffcc0022;border:1px solid #ffcc0066;border-radius:2px;padding:8px 12px;cursor:pointer;color:#ffcc00;font-size:13px;flex-shrink:0">🔯</button>
+            </div>
+        </div>
+
+        <div id="cl-fr-result" style="flex:1;overflow-y:auto;padding:14px">
+            ${fs.loading ? `
+            <div style="text-align:center;padding:30px;color:#664422">
+                <div style="font-size:28px;animation:scouter-spin 2s linear infinite;display:inline-block">🔯</div>
+                <div style="margin-top:10px;font-size:12px">신령님께 여쭤보는 중...</div>
+            </div>` : fs.result ? `
+            <div style="background:#0a0800;border:1px solid #ffcc0044;border-radius:4px;padding:14px;margin-bottom:10px">
+                <div style="font-size:10px;color:#664422;margin-bottom:8px">💬 ${esc(fs.question)}</div>
+                <div style="font-size:12px;color:#ffcc88;line-height:1.9;white-space:pre-wrap">${esc(fs.result)}</div>
+            </div>
+            <button id="cl-fr-save" style="width:100%;background:#ffcc0011;border:1px solid #ffcc0044;border-radius:2px;padding:8px;cursor:pointer;color:#886633;font-size:11px;margin-bottom:14px">📌 저장하기</button>
+            ` : `
+            <div style="text-align:center;padding:30px;color:#442200;font-size:11px">위에서 질문을 선택하거나 직접 여쭤보세요</div>
+            `}
+            ${savedList ? `
+            <div style="font-size:9px;color:#442200;letter-spacing:2px;margin-bottom:8px;padding-top:${fs.result?'0':'14px'}">◆ 저장된 점괘</div>
+            ${savedList}` : ''}
+        </div>
+    </div>`;
+
+    const ask = async (question) => {
+        if (!question?.trim()) return;
+        fs.loading = true; fs.question = question; fs.result = null;
+        renderFortune(container);
 
         try {
-            setStatus('채팅 기록을 읽는 중...', '로어북 · 캐릭터 시트 · 대화 내용');
-            const slot = getPromptSlot('fortuneBase');
-            const baseRaw = await callAIFortune(slot.user, slot.system);
-            room.baseContext = stripInfoBlocks(baseRaw);
+            const charDesc = [char?.description, char?.personality, char?.scenario].filter(Boolean).join('\n').slice(0, 800);
+            const personaDesc = personaName ? (pu?.persona_description || '').slice(0, 400) : '';
+            const contextStr = [
+                charDesc ? `[${charName} 캐릭터 시트]\n${charDesc}` : '',
+                personaDesc ? `[${personaName} 페르소나 시트]\n${personaDesc}` : '',
+            ].filter(Boolean).join('\n\n');
 
-            setStatus('사주를 뽑는 중...', '두 사람의 일주와 오행을 계산하고 있어요');
-            const greetSlot = getPromptSlot('fortuneChat');
-            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext);
-            const greet = await callAI(
-                `Write ONE short greeting sentence as 챗씨부인. 
-RULES: 
-- Maximum 1-2 sentences. 
-- Do NOT analyze, explain, or reveal any information from the context.
-- Do NOT mention saju, compatibility, or any character details.
-- Just casually acknowledge the visitor arrived. Slightly bored/detached tone.
-- Korean only.
-Example: "왔어요? 뭐가 궁금해요." or "앉아요."`,
-                greetSystem
-            );
-            room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
-            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
-            if (target) { target.baseContext = room.baseContext; target.messages = room.messages; save(); }
-            renderFortuneChatRoom(container, roomId, false);
-        } catch (e) {
-            if (msgEl) msgEl.innerHTML = `<div style="color:#a05050;font-size:12px;padding:20px;text-align:center">로딩 실패: ${esc(e.message)}<br><button onclick="renderFortune(this.closest('#scouter-float').querySelector('.cl-pane.active'))" style="margin-top:8px;background:none;border:1px solid #664444;padding:5px 10px;cursor:pointer;color:#aa6666;font-size:11px;border-radius:2px">← 뒤로</button></div>`;
-        }
-        return;
-    }
 
-    // 개인방 첫 인사
-    if (room.type === 'personal' && room.messages.length === 0) {
-        try {
-            const greetSlot = getPromptSlot('fortuneChat');
-            const greetSystem = greetSlot.system.replace('{{baseContext}}', room.baseContext || '') +
-                '\n\n[개인 상담방] 맹신 유도 금지. 최대한 긍정적인 방향으로 이야기해줄 것.';
-            const greet = await callAI(
-                `Write ONE short greeting as 챗씨부인.
-RULES:
-- 1-2 sentences max.
-- Do NOT analyze the person or reveal any info yet.
-- Just greet them naturally, slightly detached.
-- Korean only.
-Example: "왔어요. 앉아요." or "어, 왔네요. 뭐가 궁금해요?"`,
-                greetSystem
-            );
-            room.messages = [{ role: 'assistant', content: filterPhoneTrigger(greet) }];
-            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
-            if (target) { target.messages = room.messages; save(); }
-            renderFortuneChatRoom(container, roomId, false);
-        } catch (e) { toastr.error('첫 인사 실패: ' + e.message); }
-        return;
-    }
+            const prompt = contextStr
+                ? `${contextStr}\n\n[질문] ${question}`
+                : `[질문] ${question}`;
 
-    container.querySelector('#cl-fc-back')?.addEventListener('click', () => renderFortune(container));
 
-    container.querySelector('#cl-fc-refresh')?.addEventListener('click', async () => {
-        if (room.type !== 'couple') return;
-        toastr.info('채팅 다시 읽는 중...');
-        try {
-            const slot = getPromptSlot('fortuneBase');
-            const baseRaw = await callAIFortune(slot.user, slot.system);
-            room.baseContext = stripInfoBlocks(baseRaw);
-            const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
-            if (target) { target.baseContext = room.baseContext; save(); }
-            toastr.success('업데이트 완료');
-        } catch (e) { toastr.error('새로고침 실패'); }
-    });
 
-    const msgEl = container.querySelector('#cl-fc-messages');
-    if (msgEl) msgEl.scrollTop = msgEl.scrollHeight;
-
-    function addBubble(role, content) {
-        if (!msgEl) return;
-        const div = document.createElement('div');
-        div.style.cssText = 'margin-bottom:12px';
-        if (role === 'user') {
-            div.innerHTML = `<div style="display:flex;justify-content:flex-end"><div style="background:${C.purple}33;border:1px solid ${C.purple}66;border-radius:10px 10px 2px 10px;padding:10px 13px;max-width:80%;font-size:12px;color:${C.textBright};line-height:1.8">${esc(content)}</div></div>`;
-        } else if (role === 'typing') {
-            div.id = 'cl-fc-typing';
-            div.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:12px 16px;font-size:18px;letter-spacing:4px;color:#ffcc00">
-                <span style="animation:scouter-dot 1s ease-in-out infinite">·</span>
-                <span style="animation:scouter-dot 1s ease-in-out 0.3s infinite">·</span>
-                <span style="animation:scouter-dot 1s ease-in-out 0.6s infinite">·</span>
-            </div></div>`;
-        } else if (role === 'error') {
-            div.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:#2a0a0a;border:1px solid #aa333344;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:11px;color:#cc6666;line-height:1.7">${esc(content)}</div></div>`;
-        } else {
-            div.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start"><div style="font-size:22px;flex-shrink:0">🔯</div><div style="background:${C.bgCard};border:1px solid #ffcc0044;border-radius:2px 10px 10px 10px;padding:10px 13px;max-width:85%;font-size:12px;color:${C.text};line-height:1.9;white-space:pre-wrap">${esc(content)}</div></div>`;
-        }
-        msgEl.appendChild(div);
-        msgEl.scrollTop = msgEl.scrollHeight;
-    }
-
-    const send = async () => {
-        const input = container.querySelector('#cl-fc-input');
-        const sendBtn = container.querySelector('#cl-fc-send');
-        const text = input?.value?.trim();
-        if (!text || sendBtn?.disabled) return;
-        input.value = '';
-        sendBtn.disabled = true;
-        sendBtn.style.opacity = '0.4';
-
-        addBubble('user', text);
-        room.messages.push({ role: 'user', content: text });
-
-        const s = getSettings(); const target = (s.fortuneRooms||[]).find(r => r.id === roomId);
-        if (target) { target.messages = room.messages; save(); }
-
-        addBubble('typing', '');
-
-        try {
-            const slot = getPromptSlot('fortuneChat');
-            const system = slot.system.replace('{{baseContext}}', room.baseContext || '') +
-                (room.type === 'personal' ? '\n\n[개인 상담방] 맹신 유도 금지. 나쁜 쪽으로 지나치게 편향하지 말 것.' : '');
-            // callAI 방식 — system을 첫 메시지로 주입, 이후 히스토리
-            const historyMsgs = (room.messages||[]).slice(-20);
-            const response = await callAIWithHistory(system, historyMsgs);
-            const cleaned = filterPhoneTrigger(response || '(응답 없음)');
-            room.messages.push({ role: 'assistant', content: cleaned });
-            if (target) { target.messages = room.messages; save(); }
-            container.querySelector('#cl-fc-typing')?.remove();
-            addBubble('assistant', cleaned);
-        } catch (e) {
-            container.querySelector('#cl-fc-typing')?.remove();
-            const errMsg = `연결 실패: ${e.message || '알 수 없는 오류'}`;
-            addBubble('error', errMsg);
-        } finally {
-            sendBtn.disabled = false;
-            sendBtn.style.opacity = '1';
+            const result = await callAIFortune(prompt, FORTUNE_SYSTEM);
+            fs.result = filterPhoneTrigger(stripInfoBlocks(result));
+            fs.loading = false;
+            renderFortune(container);
+        } catch(e) {
+            fs.loading = false; fs.result = `오류: ${e.message}`; renderFortune(container);
         }
     };
 
-    container.querySelector('#cl-fc-send')?.addEventListener('click', send);
-    container.querySelector('#cl-fc-input')?.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    container.querySelector('#cl-fq-ask')?.addEventListener('click', () => {
+        const val = container.querySelector('#cl-fq-custom')?.value?.trim();
+        if (val) ask(val);
     });
+    container.querySelector('#cl-fq-custom')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { const val = e.target.value?.trim(); if (val) ask(val); }
+    });
+    container.querySelector('#cl-fr-save')?.addEventListener('click', () => {
+        if (!fs.result) return;
+        const s = getSettings();
+        if (!s.fortuneRecords) s.fortuneRecords = [];
+        s.fortuneRecords.unshift({ id: 'fr_'+Date.now(), question: fs.question, answer: fs.result, date: new Date().toLocaleDateString('ko').slice(2).replace(/\. /g,'.') });
+        if (s.fortuneRecords.length > 50) s.fortuneRecords = s.fortuneRecords.slice(0, 50);
+        save(); toastr.success('저장됐습니다'); renderFortune(container);
+    });
+    container.querySelectorAll('.cl-fr-del').forEach(btn =>
+        btn.addEventListener('click', () => {
+            const s = getSettings();
+            s.fortuneRecords = (s.fortuneRecords||[]).filter(r => r.id !== btn.dataset.id);
+            save(); renderFortune(container);
+        })
+    );
 }
+
 
 async function callAIFortune(prompt, systemPrompt) {
     const ctx = SillyTavern.getContext();
@@ -1821,13 +1681,12 @@ async function renderDailyFortune(container) {
     let personaName = '페르소나 없음';
     let personaDesc = '';
     try {
-        const { power_user } = await import('/scripts/power-user.js');
-        const active = power_user?.active_persona;
-        if (active && power_user?.personas?.[active]) {
-            personaName = power_user.personas[active];
-            const descObj = power_user?.persona_descriptions?.[active];
-            personaDesc = typeof descObj === 'string' ? descObj : (descObj?.description || '');
+        const pu = SillyTavern.getContext().powerUserSettings;
+        const defaultKey = pu?.default_persona;
+        if (defaultKey && pu?.personas?.[defaultKey]) {
+            personaName = pu.personas[defaultKey];
         }
+        personaDesc = pu?.persona_description || '';
     } catch(e) { console.warn('[챗씨부인] 페르소나 로드 실패:', e.message); }
 
     if (!container._fs) container._fs = { tab: 'char', charFortune: null, personaFortune: null };
