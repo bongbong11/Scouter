@@ -78,6 +78,76 @@ function getSettings() {
 function save() { SillyTavern.getContext().saveSettingsDebounced(); }
 function getRank(t) { return RANK_THRESHOLDS.find(r => t >= r.min) || RANK_THRESHOLDS[RANK_THRESHOLDS.length - 1]; }
 
+// ═══════════════════════════════════════════
+// 데이터 정리 — 고아 데이터 + 캡 안전망
+// ═══════════════════════════════════════════
+const DATA_CAPS = {
+    roster: 200,
+    madameList: 100,
+    sajuList: 100,
+    fortuneRooms: 50,
+    fortuneRecords: 50,
+};
+
+function pruneOrphanedData() {
+    const s = getSettings();
+    let changed = false;
+    const validCharIds = new Set((s.roster || []).map(c => c.id));
+
+    // 1) madameList: castIds가 roster에 없는 캐릭터만 참조하면 정리 (이름 기반 폴백 있으니 castIds만 비움)
+    if (Array.isArray(s.madameList)) {
+        for (const m of s.madameList) {
+            if (Array.isArray(m.castIds)) {
+                const filtered = m.castIds.filter(id => validCharIds.has(id));
+                if (filtered.length !== m.castIds.length) { m.castIds = filtered; changed = true; }
+            }
+        }
+    }
+
+    // 2) sajuList: charId가 roster에 없으면 정리
+    if (Array.isArray(s.sajuList)) {
+        for (const sj of s.sajuList) {
+            if (sj.charId && !validCharIds.has(sj.charId)) { sj.charId = null; changed = true; }
+        }
+    }
+
+    // 3) fortuneRooms: castIds 정리
+    if (Array.isArray(s.fortuneRooms)) {
+        for (const r of s.fortuneRooms) {
+            if (Array.isArray(r.castIds)) {
+                const filtered = r.castIds.filter(id => validCharIds.has(id));
+                if (filtered.length !== r.castIds.length) { r.castIds = filtered; changed = true; }
+            }
+        }
+    }
+
+    // 4) 캡 안전망 — 길이 제한 초과 시 오래된 것부터 삭제 (배열은 unshift로 최신이 앞에 오므로 뒤를 자름)
+    for (const [key, max] of Object.entries(DATA_CAPS)) {
+        if (Array.isArray(s[key]) && s[key].length > max) {
+            s[key] = s[key].slice(0, max);
+            changed = true;
+        }
+    }
+
+    // 5) fortuneRooms 내부 messages도 과도하게 쌓이면 최근 100개로 캡
+    if (Array.isArray(s.fortuneRooms)) {
+        for (const r of s.fortuneRooms) {
+            if (Array.isArray(r.messages) && r.messages.length > 100) {
+                r.messages = r.messages.slice(-100);
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) save();
+}
+
+function resetAllData() {
+    const ctx = SillyTavern.getContext();
+    ctx.extensionSettings[MODULE_NAME] = structuredClone(defaultSettings);
+    save();
+}
+
 function getCharLabel(stats) {
     const { charm, presence, desire, wit, aura } = stats;
     const total = charm + presence + desire + wit + aura;
@@ -500,6 +570,7 @@ function makeDraggable(panel, handle) {
 // ═══════════════════════════════════════════
 function openFloat() {
     if (document.getElementById('scouter-float')) return;
+    pruneOrphanedData();
     document.body.insertAdjacentHTML('beforeend', createFloatingPanel());
     const panel = document.getElementById('scouter-float');
     makeDraggable(panel, document.getElementById('scouter-drag-handle'));
@@ -1788,7 +1859,10 @@ function renderSettings(container) {
                 <div><div style="font-size:22px;font-weight:900;color:${C.gold};font-family:monospace">${(settings.sajuList||[]).length}</div><div style="font-size:9px;color:${C.textDim}">사주</div></div>
                 <div><div style="font-size:22px;font-weight:900;color:#ffcc00;font-family:monospace">${(settings.fortuneRooms||[]).length}</div><div style="font-size:9px;color:${C.textDim}">신당방</div></div>
             </div>
-            <button id="cl-clear-all" style="width:100%;background:none;border:1px solid #804040;border-radius:2px;padding:8px;cursor:pointer;color:#a06060;font-size:11px">🗑 전체 데이터 삭제</button>
+            <div style="display:flex;gap:8px">
+                <button id="cl-clear-records" style="flex:1;background:none;border:1px solid #664422;border-radius:2px;padding:8px;cursor:pointer;color:#aa8844;font-size:11px">📋 기록만 삭제</button>
+                <button id="cl-clear-all" style="flex:1;background:none;border:1px solid #804040;border-radius:2px;padding:8px;cursor:pointer;color:#a06060;font-size:11px">🗑 전체 초기화</button>
+            </div>
         </div>
 
         <div style="text-align:center;font-size:9px;color:${C.textDim};padding-top:8px;border-top:1px solid ${C.border}">
@@ -1808,12 +1882,22 @@ function renderSettings(container) {
     container.querySelector('#cl-s-uninject')?.addEventListener('click', () => {
         clearFortune(); renderSettings(container); toastr.success('운세 주입 해제됨');
     });
+    container.querySelector('#cl-clear-records')?.addEventListener('click', async () => {
+        const { Popup, POPUP_RESULT } = SillyTavern.getContext();
+        const confirmed = await Popup.show.confirm('기록 삭제', '궁합/사주/신당방/저장된 점괘 기록을 삭제합니다. 등록된 손님(캐릭터)은 유지됩니다. 진행할까요?');
+        if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
+            const s = getSettings();
+            s.madameList = []; s.sajuList = []; s.fortuneRooms = []; s.fortuneRecords = [];
+            save();
+            toastr.success('기록 삭제 완료'); renderSettings(container);
+        }
+    });
     container.querySelector('#cl-clear-all')?.addEventListener('click', async () => {
         const { Popup, POPUP_RESULT } = SillyTavern.getContext();
-        const confirmed = await Popup.show.confirm('전체 삭제', '모든 데이터를 삭제합니다. 복구 불가.');
+        const confirmed = await Popup.show.confirm('전체 초기화', '모든 데이터(캐릭터/궁합/사주/신당기록/운세)를 완전히 초기화합니다. 복구 불가능합니다. 진행할까요?');
         if (confirmed === POPUP_RESULT.AFFIRMATIVE) {
-            const s = getSettings(); s.roster=[]; s.madameList=[]; s.sajuList=[]; s.fortuneRooms=[]; s.dailyFortune=null; s.dailyFortuneInjected=false; save();
-            toastr.success('전체 삭제 완료'); renderSettings(container);
+            resetAllData();
+            toastr.success('전체 초기화 완료'); renderSettings(container);
         }
     });
 }
@@ -1886,6 +1970,7 @@ export async function onActivate() {
     console.log(`[${MODULE_NAME}] 활성화`);
     injectCSS();
     injectLoadingCSS();
+    pruneOrphanedData();
 
     // 원격 prompts.json 로드
     await loadRemotePrompts();
